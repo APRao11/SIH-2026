@@ -7,6 +7,13 @@ h1, h2, .brand-mark, .alert-button, .eyebrow { font-family: 'Space Grotesk', san
 .ambient-shape-two { width: 20rem; height: 20rem; left: -15rem; bottom: 5rem; background: #dff4ee; opacity: .75; }
 .brand-mark { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 10px; color: white; background: #e5533d; box-shadow: 0 8px 18px #e5533d33; }
 .help-button { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border: 1px solid #dce2df; border-radius: 50%; color: #52605d; background: #ffffffaa; }
+.help-button:hover, .help-close:hover { border-color: #e5533d; color: #df4d38; }
+.help-overlay { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 1.5rem; background: #17232180; }
+.help-dialog { width: min(100%, 34rem); border: 1px solid #d5e2dc; border-radius: 16px; padding: 1.5rem; background: #fff; box-shadow: 0 24px 60px #17232140; }
+.help-close { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border: 1px solid #dce2df; border-radius: 50%; color: #52605d; background: #fff; }
+.help-callout { display: grid; gap: .35rem; margin-top: 1.5rem; border: 1px solid #f0c4bd; border-radius: 10px; padding: 1rem; color: #8c3025; background: #fff8f6; font-size: .9rem; }
+.help-callout a { color: #c83e2c; text-decoration: underline; }.help-callout span { color: #785850; font-size: .8rem; }
+.help-list { display: grid; gap: 1rem; margin-top: 1.5rem; }.help-list div { border-left: 3px solid #dff4e9; padding-left: .9rem; }.help-list strong { color: #263431; font-size: .9rem; }.help-list p { margin-top: .25rem; color: #62706b; font-size: .8rem; line-height: 1.5; }
 .eyebrow { color: #df4d38; font-size: .7rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .field-label { display: block; color: #172321; font-size: .9rem; font-weight: 700; }
 .field-label span { color: #87918f; font-weight: 400; }
