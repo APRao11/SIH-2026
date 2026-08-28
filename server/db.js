@@ -36,6 +36,8 @@ const userColumns = database.prepare('PRAGMA table_info(users)').all().map(({ na
 const responderColumns = [
   ['email', 'TEXT'],
   ['qualification', 'TEXT'],
+  ['identity_id', 'TEXT'],
+  ['institution', 'TEXT'],
   ['document_filename', 'TEXT'],
   ['document_path', 'TEXT'],
   ['password_hash', 'TEXT'],

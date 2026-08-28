@@ -28,11 +28,11 @@ const upload = multer({
 app.use(express.json({ limit: '10kb' }))
 
 app.post('/api/responders', upload.single('verificationDocument'), (request, response) => {
-  const { name, phone, email, role, qualification, password } = request.body || {}
-  if (!name?.trim() || !phone?.trim() || !email?.trim() || !roles.has(role) || !qualification?.trim() || !password || !request.file) return response.status(400).json({ error: 'All registration fields and a verification document are required.' })
+  const { name, phone, email, role, qualification, identity_id: identityId, institution, password } = request.body || {}
+  if (!name?.trim() || !phone?.trim() || !email?.trim() || !roles.has(role) || !qualification?.trim() || !identityId?.trim() || !institution?.trim() || !password || !request.file) return response.status(400).json({ error: 'All registration fields and a verification document are required.' })
   if (password.length < 8) return response.status(400).json({ error: 'Password must be at least 8 characters.' })
   const passwordHash = scryptSync(password, process.env.PASSWORD_SALT || 'mvp-development-salt', 32).toString('hex')
-  const result = database.prepare('INSERT INTO users (name, phone, email, role, qualification, document_filename, document_path, password_hash, verified, available, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)').run(name.trim(), phone.trim(), email.trim().toLowerCase(), role, qualification.trim(), request.file.originalname, request.file.path, passwordHash, 'pending')
+  const result = database.prepare('INSERT INTO users (name, phone, email, role, qualification, identity_id, institution, document_filename, document_path, password_hash, verified, available, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)').run(name.trim(), phone.trim(), email.trim().toLowerCase(), role, qualification.trim(), identityId.trim(), institution.trim(), request.file.originalname, request.file.path, passwordHash, 'pending')
   const responder = database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, document_filename FROM users WHERE id = ?').get(result.lastInsertRowid)
   return response.status(201).json({ responder })
 })
@@ -82,7 +82,7 @@ app.get('/api/emergencies', (_request, response) => {
 })
 
 app.get('/api/emergencies/:id', (request, response) => {
-  const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  const emergency = database.prepare("SELECT e.*, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role FROM emergencies e LEFT JOIN users u ON u.id = e.assigned_responder_id WHERE e.id = ?").get(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
   return response.json({ emergency })
 })
