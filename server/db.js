@@ -32,4 +32,17 @@ database.exec(`
   );
 `)
 
+const userColumns = database.prepare('PRAGMA table_info(users)').all().map(({ name }) => name)
+const responderColumns = [
+  ['email', 'TEXT'],
+  ['qualification', 'TEXT'],
+  ['document_filename', 'TEXT'],
+  ['document_path', 'TEXT'],
+  ['password_hash', 'TEXT'],
+  ['verification_status', "TEXT NOT NULL DEFAULT 'pending'"],
+]
+for (const [name, definition] of responderColumns) {
+  if (!userColumns.includes(name)) database.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`)
+}
+
 export default database

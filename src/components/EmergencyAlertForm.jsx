@@ -8,8 +8,8 @@ function formatCoordinate(value) {
   return value === null ? 'Not shared yet' : value.toFixed(6)
 }
 
-export default function EmergencyAlertForm() {
-  const [emergencyType, setEmergencyType] = useState('Accident')
+export default function EmergencyAlertForm({ initialEmergencyType = 'Accident' }) {
+  const [emergencyType, setEmergencyType] = useState(initialEmergencyType)
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState(null)
   const [locationState, setLocationState] = useState('idle')
