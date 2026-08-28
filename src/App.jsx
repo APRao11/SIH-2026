@@ -9,12 +9,10 @@ import './App.css'
 function App() {
   const [view, setView] = useState('home')
   const [responder, setResponder] = useState(null)
-
   if (view === 'emergency') return <PageShell onHome={() => setView('home')} onResponder={() => setView('responder')} onAdmin={() => setView('admin')}><EmergencyFlow onBack={() => setView('home')} /></PageShell>
   if (view === 'register') return <PageShell onHome={() => setView('home')} onResponder={() => setView('responder')} onAdmin={() => setView('admin')}><ResponderRegistration onRegistered={setResponder} /></PageShell>
   if (view === 'responder') return <PageShell onHome={() => setView('home')} onResponder={() => setView('responder')} onAdmin={() => setView('admin')}><ResponderDashboard responder={responder} /></PageShell>
   if (view === 'admin') return <PageShell onHome={() => setView('home')} onResponder={() => setView('responder')} onAdmin={() => setView('admin')}><AdminVerification /></PageShell>
-
   return <PageShell onHome={() => setView('home')} onResponder={() => setView('responder')} onAdmin={() => setView('admin')}><section className="home-hero"><div className="hero-copy"><p className="eyebrow">Community-assisted response</p><h1 className="mt-4 text-5xl font-bold leading-[.98] tracking-[-.04em] text-slate-950 sm:text-7xl">Help can start with one clear step.</h1><p className="mt-6 max-w-lg text-lg leading-8 text-slate-600">Connect people in an emergency with the right next action and trained community responders nearby.</p></div><div className="home-actions"><button className="home-action emergency-action" type="button" onClick={() => setView('emergency')}><span className="action-icon"><Siren className="size-6" /></span><span><strong>Send Emergency Alert</strong><small>Call 108, then share the situation with nearby responders.</small></span></button><button className="home-action responder-action" type="button" onClick={() => setView('register')}><span className="action-icon"><ShieldPlus className="size-6" /></span><span><strong>Register as Responder</strong><small>Join the community network as a verified helper.</small></span></button></div><div className="home-note"><span className="note-line" />Prototype MVP: emergency alerts are shared with this platform only after you choose to continue.</div></section></PageShell>
 }
 

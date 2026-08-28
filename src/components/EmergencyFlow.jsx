@@ -24,7 +24,6 @@ function requestCurrentLocation(onSuccess, onFailure) {
     onFailure(firstError)
   }, accurateOptions)
 }
-
 export default function EmergencyFlow({ onBack }) {
   const [step, setStep] = useState('calling')
   const [selectedType, setSelectedType] = useState(null)
