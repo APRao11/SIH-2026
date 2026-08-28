@@ -42,8 +42,11 @@ app.get('/api/responders', (_request, response) => response.json({ responders: d
 app.patch('/api/responders/:id/verification', (request, response) => {
   const { decision } = request.body || {}
   if (!['verify', 'reject'].includes(decision)) return response.status(400).json({ error: 'Decision must be verify or reject.' })
-  const result = database.prepare('UPDATE users SET verified = ?, verification_status = ?, available = 0 WHERE id = ?').run(decision === 'verify' ? 1 : 0, decision === 'verify' ? 'verified' : 'rejected', request.params.id)
-  if (!result.changes) return response.status(404).json({ error: 'Responder not found.' })
+  const result = database.prepare("UPDATE users SET verified = ?, verification_status = ?, available = 0 WHERE id = ? AND verification_status = 'pending'").run(decision === 'verify' ? 1 : 0, decision === 'verify' ? 'verified' : 'rejected', request.params.id)
+  if (!result.changes) {
+    const responder = database.prepare('SELECT id FROM users WHERE id = ?').get(request.params.id)
+    return response.status(responder ? 409 : 404).json({ error: responder ? 'This responder has already been reviewed.' : 'Responder not found.' })
+  }
   return response.json({ responder: database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, document_filename FROM users WHERE id = ?').get(request.params.id) })
 })
 
