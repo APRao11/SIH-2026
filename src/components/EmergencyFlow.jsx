@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Camera, Flame, HeartPulse, MapPin, PhoneCall, Send, TriangleAlert, UserRound, Waves } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import AlertSentScreen from './AlertSentScreen'
@@ -67,18 +67,47 @@ function CameraVerification({ capturedImage, onCapture, onBack, onContinue }) {
     const video = videoRef.current
     if (!video || video.readyState < 2) return
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
-    onCapture(canvas.toDataURL('image/jpeg', 0.85))
+    const maxDimension = 1280
+    const scale = Math.min(1, maxDimension / Math.max(video.videoWidth, video.videoHeight))
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    onCapture(canvas.toDataURL('image/jpeg', 0.7))
     stream?.getTracks().forEach((track) => track.stop())
     setStream(null)
     setCameraState('captured')
   }
 
-  return <section className="mx-auto max-w-2xl"><button className="back-link" type="button" onClick={onBack}><ArrowLeft className="size-4" />Back to emergency type</button><div className="mt-8"><p className="eyebrow">Step 3 of 4</p><h1 className="mt-3 text-4xl font-bold text-slate-950">Photo verification</h1><p className="mt-3 text-lg text-slate-600">Take a quick photo of the scene so responders can prepare.</p></div><div className="camera-panel mt-8">{capturedImage ? <img className="camera-preview" src={capturedImage} alt="Captured emergency scene" /> : <video className="camera-preview" ref={videoRef} autoPlay muted playsInline />}{cameraState === 'starting' && <div className="camera-message">Requesting camera access...</div>}{cameraState === 'denied' && <div className="camera-message"><Camera className="mx-auto size-7 text-[#df4d38]" /><strong className="mt-3 block text-slate-950">Camera access was not granted.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Allow camera access in your browser settings to take a verification photo. You can still go back and review the emergency type.</span></div>}{cameraState === 'unsupported' && <div className="camera-message"><strong className="block text-slate-950">Camera access is unavailable here.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Open this prototype on localhost or HTTPS with a camera-capable browser.</span></div>}</div>{cameraState === 'captured' ? <div className="mt-5 flex gap-3"><button className="secondary-button flex-1 justify-center" type="button" onClick={() => { onCapture(null); setCameraState('starting'); setCameraAttempt((attempt) => attempt + 1) }}>Retake</button><button className="alert-button flex-1" type="button" onClick={onContinue}>Continue<ArrowRight className="size-5" /></button></div> : <button className="alert-button mt-5" type="button" disabled={cameraState !== 'ready'} onClick={capture}><Camera className="size-5" />Take photo</button>}<p className="mt-4 text-center text-xs text-slate-500">The image is stored temporarily in this session and is not uploaded.</p></section>
+  return (
+    <section className="mx-auto max-w-2xl">
+      <button className="back-link" type="button" onClick={onBack}><ArrowLeft className="size-4" />Back to emergency type</button>
+      <div className="mt-8">
+        <p className="eyebrow">Step 3 of 4</p>
+        <h1 className="mt-3 text-4xl font-bold text-slate-950">Photo verification</h1>
+        <p className="mt-3 text-lg text-slate-600">Take a quick photo of the scene so responders can prepare.</p>
+      </div>
+      <div className="camera-panel mt-8">
+        {capturedImage ? <img className="camera-preview" src={capturedImage} alt="Captured emergency scene" /> : <video className="camera-preview" ref={videoRef} autoPlay muted playsInline />}
+        {cameraState === 'starting' && <div className="camera-message">Requesting camera access...</div>}
+        {cameraState === 'denied' && <div className="camera-message"><Camera className="mx-auto size-7 text-[#df4d38]" /><strong className="mt-3 block text-slate-950">Camera access was not granted.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Allow camera access in your browser settings to take a verification photo. You can still go back and review the emergency type.</span></div>}
+        {cameraState === 'unsupported' && <div className="camera-message"><strong className="block text-slate-950">Camera access is unavailable here.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Open this prototype on localhost or HTTPS with a camera-capable browser.</span></div>}
+      </div>
+      {cameraState === 'captured' ? (
+        <div className="mt-5 flex gap-3">
+          <button className="secondary-button flex-1 justify-center" type="button" onClick={() => { onCapture(null); setCameraState('starting'); setCameraAttempt((attempt) => attempt + 1) }}>Retake</button>
+          <button className="alert-button flex-1" type="button" onClick={onContinue}>Continue<ArrowRight className="size-5" /></button>
+        </div>
+      ) : (
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <button className="alert-button flex-1" type="button" disabled={cameraState !== 'ready'} onClick={capture}><Camera className="size-5" />Take photo</button>
+        </div>
+      )}
+      {cameraState !== 'captured' && <p className="mt-5 text-center text-sm text-slate-500">Your photo will be shared with verified responders for this alert.</p>}
+    </section>
+  )
 }
-
 function AlertConfirmation({ emergencyType, capturedImage, onBack, onSent }) {
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState(null)
@@ -105,7 +134,7 @@ function AlertConfirmation({ emergencyType, capturedImage, onBack, onSent }) {
     setSubmitState('loading'); setError('')
     try {
       const apiEmergencyType = emergencyType === 'Unconscious Person' ? 'Other' : emergencyType
-      const response = await fetch('/api/emergencies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emergency_type: apiEmergencyType, description, latitude: location.latitude, longitude: location.longitude }) })
+      const response = await fetch('/api/emergencies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emergency_type: apiEmergencyType, description, latitude: location.latitude, longitude: location.longitude, scene_photo: capturedImage }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to send alert.')
       onSent(result.emergency)
@@ -113,6 +142,7 @@ function AlertConfirmation({ emergencyType, capturedImage, onBack, onSent }) {
   }
 
   const typeLabel = emergencyTypes.find((type) => type.value === emergencyType)?.label || emergencyType
-  return <section className="mx-auto max-w-3xl"><button className="back-link" type="button" onClick={onBack}><ArrowLeft className="size-4" />Back to photo verification</button><div className="mt-8"><p className="eyebrow">Step 4 of 4</p><h1 className="mt-3 text-4xl font-bold text-slate-950">Confirm your emergency alert</h1><p className="mt-3 text-lg text-slate-600">Review what will be shared with nearby responders.</p></div><div className="confirmation-grid mt-8"><div className="confirmation-panel"><div className="confirmation-summary mt-0"><span className="type-icon"><TriangleAlert className="size-5" /></span><div><span className="text-xs font-bold uppercase tracking-wider text-slate-500">Emergency type</span><strong className="mt-1 block text-lg text-slate-950">{typeLabel}</strong></div></div><label className="form-field mt-5" htmlFor="confirmation-description">Short description <span>(optional)</span><textarea id="confirmation-description" className="field-input min-h-28 resize-y" maxLength="240" placeholder="Add anything responders should know..." value={description} onChange={(event) => setDescription(event.target.value)} /></label><div className="location-summary mt-5"><div className="flex items-center gap-2"><MapPin className="size-4 text-[#df4d38]" /><strong className="text-sm text-slate-950">Detected GPS location</strong></div>{location ? <div className="mt-2 grid grid-cols-2 gap-3 font-mono text-xs text-slate-700"><span>Lat {location.latitude.toFixed(6)}</span><span>Lng {location.longitude.toFixed(6)}</span></div> : <p className="mt-2 text-sm text-red-700">{locationState === 'loading' ? 'Detecting your location...' : locationState === 'denied' ? 'Location permission denied.' : locationState === 'unavailable' ? 'Your device could not determine a location. Turn on Wi-Fi and Windows Location services.' : locationState === 'timeout' ? 'Location detection timed out. Try again near a window or with Wi-Fi enabled.' : locationState === 'insecure' ? 'Location requires localhost or HTTPS; do not open the built HTML file directly.' : locationState === 'unsupported' ? 'This browser does not support location.' : 'Location is unavailable.'}</p>}{locationState !== 'loading' && <button className="mt-3 text-xs font-bold text-slate-600 underline" type="button" onClick={detectLocation}>Try location again</button>}</div></div><div className="confirmation-media"><div className="confirmation-photo">{capturedImage ? <img src={capturedImage} alt="Captured emergency scene" /> : <div className="camera-message"><Camera className="mx-auto size-6" /><span className="mt-2 block">No photo captured</span></div>}</div>{location && <EmergencyMap location={location} emergencies={[]} />}</div></div>{error && <p className="mt-5 text-sm font-medium text-red-700" role="alert">{error}</p>}<button className="alert-button mt-7" type="button" disabled={!location || submitState === 'loading'} onClick={sendAlert}><Send className="size-5" />{submitState === 'loading' ? 'Sending alert...' : 'Send alert'}</button><p className="mt-4 text-center text-xs text-slate-500">Your photo stays on this device and is not sent to the backend.</p></section>
+  return <section className="mx-auto max-w-3xl"><button className="back-link" type="button" onClick={onBack}><ArrowLeft className="size-4" />Back to photo verification</button><div className="mt-8"><p className="eyebrow">Step 4 of 4</p><h1 className="mt-3 text-4xl font-bold text-slate-950">Confirm your emergency alert</h1><p className="mt-3 text-lg text-slate-600">Review what will be shared with nearby responders.</p></div><div className="confirmation-grid mt-8"><div className="confirmation-panel"><div className="confirmation-summary mt-0"><span className="type-icon"><TriangleAlert className="size-5" /></span><div><span className="text-xs font-bold uppercase tracking-wider text-slate-500">Emergency type</span><strong className="mt-1 block text-lg text-slate-950">{typeLabel}</strong></div></div><label className="form-field mt-5" htmlFor="confirmation-description">Short description <span>(optional)</span><textarea id="confirmation-description" className="field-input min-h-28 resize-y" maxLength="240" placeholder="Add anything responders should know..." value={description} onChange={(event) => setDescription(event.target.value)} /></label><div className="location-summary mt-5"><div className="flex items-center gap-2"><MapPin className="size-4 text-[#df4d38]" /><strong className="text-sm text-slate-950">Detected GPS location</strong></div>{location ? <div className="mt-2 grid grid-cols-2 gap-3 font-mono text-xs text-slate-700"><span>Lat {location.latitude.toFixed(6)}</span><span>Lng {location.longitude.toFixed(6)}</span></div> : <p className="mt-2 text-sm text-red-700">{locationState === 'loading' ? 'Detecting your location...' : locationState === 'denied' ? 'Location permission denied.' : locationState === 'unavailable' ? 'Your device could not determine a location. Turn on Wi-Fi and Windows Location services.' : locationState === 'timeout' ? 'Location detection timed out. Try again near a window or with Wi-Fi enabled.' : locationState === 'insecure' ? 'Location requires localhost or HTTPS; do not open the built HTML file directly.' : locationState === 'unsupported' ? 'This browser does not support location.' : 'Location is unavailable.'}</p>}{locationState !== 'loading' && <button className="mt-3 text-xs font-bold text-slate-600 underline" type="button" onClick={detectLocation}>Try location again</button>}</div></div><div className="confirmation-media"><div className="confirmation-photo">{capturedImage ? <img src={capturedImage} alt="Captured emergency scene" /> : <div className="camera-message"><Camera className="mx-auto size-6" /><span className="mt-2 block">No photo captured</span></div>}</div>{location && <EmergencyMap location={location} emergencies={[]} />}</div></div>{error && <p className="mt-5 text-sm font-medium text-red-700" role="alert">{error}</p>}<button className="alert-button mt-7" type="button" disabled={!location || submitState === 'loading'} onClick={sendAlert}><Send className="size-5" />{submitState === 'loading' ? 'Sending alert...' : 'Send alert'}</button><p className="mt-4 text-center text-xs text-slate-500">Your photo will be shared with verified responders for this alert.</p></section>
 }
+
 

@@ -70,6 +70,7 @@ td { border-top: 1px solid #e8edeb; padding: 1rem; color: #5f6c68; vertical-alig
 @media (max-width: 800px) { .home-hero { min-height: auto; grid-template-columns: 1fr; gap: 2.5rem; padding-top: 1rem; }.home-note { grid-column: auto; } }
 .camera-panel { position: relative; overflow: hidden; min-height: 22rem; border: 1px solid #cad7d1; border-radius: 14px; background: #172321; box-shadow: 0 18px 40px #1f302b18; }
 .camera-preview { display: block; width: 100%; min-height: 22rem; object-fit: cover; background: #172321; }
+.responder-scene-photo { display: block; width: 100%; max-height: 15rem; object-fit: cover; border: 1px solid #d5e2dc; border-radius: 10px; }
 .camera-message { position: absolute; inset: 0; display: grid; place-content: center; padding: 2rem; color: #c8d4cf; text-align: center; }
 .camera-message strong { font-family: 'Space Grotesk', sans-serif; font-size: 1rem; }.camera-message span { max-width: 22rem; margin-inline: auto; }
 .confirmation-panel { border: 1px solid #d5e2dc; border-radius: 16px; padding: 2rem 1.5rem; background: #ffffffc7; box-shadow: 0 20px 50px #1f302b0d; }.confirmation-icon { display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 auto; border-radius: 50%; color: white; background: #1c9b6c; box-shadow: 0 0 0 8px #dff4e9; }.confirmation-summary { display: flex; align-items: center; gap: .8rem; margin-top: 1.75rem; border: 1px solid #e0e5e2; border-radius: 10px; padding: 1rem; text-align: left; background: #f7faf8; }

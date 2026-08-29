@@ -2,8 +2,8 @@ import express from 'express'
 import dotenv from 'dotenv'
 import database from './db.js'
 import multer from 'multer'
-import { mkdirSync } from 'node:fs'
-import { extname } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { extname, join } from 'node:path'
 import { randomUUID, scryptSync } from 'node:crypto'
 
 dotenv.config()
@@ -15,7 +15,9 @@ const statuses = new Set(['Alert created', 'Searching for nearby responders', 'R
 const responderStatuses = new Set(['accepted', 'rejected'])
 const roles = new Set(['Doctor', 'Medical Student', 'Trained Volunteer'])
 const uploadDirectory = process.env.UPLOAD_DIR || './data/uploads'
+const scenePhotoDirectory = join(uploadDirectory, 'emergency-scenes')
 mkdirSync(uploadDirectory, { recursive: true })
+mkdirSync(scenePhotoDirectory, { recursive: true })
 const upload = multer({
   storage: multer.diskStorage({
     destination: uploadDirectory,
@@ -25,7 +27,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 })
 
-app.use(express.json({ limit: '10kb' }))
+app.use(express.json({ limit: '20mb' }))
 
 app.post('/api/responders', upload.single('verificationDocument'), (request, response) => {
   const { name, phone, email, role, qualification, identity_id: identityId, institution, password } = request.body || {}
@@ -68,15 +70,40 @@ function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
 }
 
+function saveScenePhoto(dataUrl) {
+  if (!dataUrl) return null
+  if (typeof dataUrl !== 'string') throw new Error('The scene photo must be an image.')
+  const match = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl)
+  if (!match) throw new Error('The scene photo must be a JPEG or PNG image.')
+  const data = Buffer.from(match[2], 'base64')
+  if (!data.length || data.length > 5 * 1024 * 1024) throw new Error('The scene photo must be 5 MB or smaller.')
+  const extension = match[1] === 'image/png' ? '.png' : '.jpg'
+  const filename = `${randomUUID()}${extension}`
+  const path = join(scenePhotoDirectory, filename)
+  writeFileSync(path, data, { flag: 'wx' })
+  return { filename, path }
+}
+
 app.post('/api/emergencies', (request, response) => {
-  const { emergency_type: emergencyType, description = '', latitude, longitude } = request.body || {}
+  const { emergency_type: emergencyType, description = '', latitude, longitude, scene_photo: scenePhoto } = request.body || {}
   if (!emergencyTypes.has(emergencyType)) return response.status(400).json({ error: 'A valid emergency type is required.' })
   if (!validCoordinate(latitude, -90, 90) || !validCoordinate(longitude, -180, 180)) return response.status(400).json({ error: 'Valid latitude and longitude are required.' })
   if (typeof description !== 'string' || description.length > 240) return response.status(400).json({ error: 'Description must be 240 characters or fewer.' })
 
-  const result = database.prepare('INSERT INTO emergencies (emergency_type, description, latitude, longitude) VALUES (?, ?, ?, ?)').run(emergencyType, description.trim(), latitude, longitude)
+  let photo
+  try { photo = saveScenePhoto(scenePhoto) } catch (error) { return response.status(400).json({ error: error.message }) }
+  const result = database.prepare('INSERT INTO emergencies (emergency_type, description, latitude, longitude, scene_photo_filename, scene_photo_path) VALUES (?, ?, ?, ?, ?, ?)').run(emergencyType, description.trim(), latitude, longitude, photo?.filename || null, photo?.path || null)
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(result.lastInsertRowid)
   return response.status(201).json({ emergency })
+})
+
+app.get('/api/emergencies/:id/photo', (request, response) => {
+  const responderId = Number(request.query.responder_id)
+  const responder = database.prepare('SELECT id FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
+  if (!responder) return response.status(403).json({ error: 'A verified, available responder is required.' })
+  const emergency = database.prepare('SELECT scene_photo_path, scene_photo_filename FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!emergency?.scene_photo_path) return response.status(404).json({ error: 'Scene photo not found.' })
+  return response.sendFile(emergency.scene_photo_path, { headers: { 'Content-Disposition': `inline; filename="${emergency.scene_photo_filename}"` } })
 })
 
 app.get('/api/emergencies', (_request, response) => {
@@ -124,5 +151,11 @@ app.patch('/api/emergencies/:id/reject', (request, response) => {
   return response.json({ emergency: database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id) })
 })
 
-app.use((_error, _request, response, _next) => response.status(400).json({ error: 'Invalid request.' }))
+app.use((error, _request, response, _next) => {
+  console.error(error)
+  if (error?.type === 'entity.too.large') {
+    return response.status(413).json({ error: 'The photo is too large. Please upload a smaller image.' })
+  }
+  return response.status(400).json({ error: error?.message || 'Invalid request.' })
+})
 app.listen(port, () => console.log(`Emergency API listening on http://localhost:${port}`))
