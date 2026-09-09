@@ -18,6 +18,36 @@ const uploadDirectory = process.env.UPLOAD_DIR || './data/uploads'
 const scenePhotoDirectory = join(uploadDirectory, 'emergency-scenes')
 mkdirSync(uploadDirectory, { recursive: true })
 mkdirSync(scenePhotoDirectory, { recursive: true })
+
+const MATCH_RADIUS_KM = 1.0
+const LOCATION_STALE_MINUTES = 15
+
+function validCoordinate(value, minimum, maximum) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
+}
+
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371 // Earth radius in kilometers
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function isLocationFresh(locationUpdatedAt, maxMinutes = LOCATION_STALE_MINUTES) {
+  if (!locationUpdatedAt) return false
+  const updatedTime = new Date(locationUpdatedAt).getTime()
+  if (Number.isNaN(updatedTime)) return false
+  const elapsedMs = Date.now() - updatedTime
+  return elapsedMs >= 0 && elapsedMs <= maxMinutes * 60 * 1000
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: uploadDirectory,
@@ -35,11 +65,11 @@ app.post('/api/responders', upload.single('verificationDocument'), (request, res
   if (password.length < 8) return response.status(400).json({ error: 'Password must be at least 8 characters.' })
   const passwordHash = scryptSync(password, process.env.PASSWORD_SALT || 'mvp-development-salt', 32).toString('hex')
   const result = database.prepare('INSERT INTO users (name, phone, email, role, qualification, identity_id, institution, document_filename, document_path, password_hash, verified, available, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)').run(name.trim(), phone.trim(), email.trim().toLowerCase(), role, qualification.trim(), identityId.trim(), institution.trim(), request.file.originalname, request.file.path, passwordHash, 'pending')
-  const responder = database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, document_filename FROM users WHERE id = ?').get(result.lastInsertRowid)
+  const responder = database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, document_filename, latitude, longitude, location_updated_at FROM users WHERE id = ?').get(result.lastInsertRowid)
   return response.status(201).json({ responder })
 })
 
-app.get('/api/responders', (_request, response) => response.json({ responders: database.prepare("SELECT id, name, role, qualification, verified, available, verification_status, document_filename FROM users WHERE role IN ('Doctor', 'Medical Student', 'Trained Volunteer') ORDER BY id DESC").all() }))
+app.get('/api/responders', (_request, response) => response.json({ responders: database.prepare("SELECT id, name, role, qualification, verified, available, verification_status, document_filename, latitude, longitude, location_updated_at FROM users WHERE role IN ('Doctor', 'Medical Student', 'Trained Volunteer') ORDER BY id DESC").all() }))
 
 app.patch('/api/responders/:id/verification', (request, response) => {
   const { decision } = request.body || {}
@@ -49,7 +79,7 @@ app.patch('/api/responders/:id/verification', (request, response) => {
     const responder = database.prepare('SELECT id FROM users WHERE id = ?').get(request.params.id)
     return response.status(responder ? 409 : 404).json({ error: responder ? 'This responder has already been reviewed.' : 'Responder not found.' })
   }
-  return response.json({ responder: database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, document_filename FROM users WHERE id = ?').get(request.params.id) })
+  return response.json({ responder: database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, document_filename, latitude, longitude, location_updated_at FROM users WHERE id = ?').get(request.params.id) })
 })
 
 app.get('/api/responders/:id/document', (request, response) => {
@@ -63,12 +93,23 @@ app.patch('/api/responders/:id/availability', (request, response) => {
   if (typeof available !== 'boolean') return response.status(400).json({ error: 'Availability must be a boolean.' })
   const result = database.prepare('UPDATE users SET available = ? WHERE id = ? AND verified = 1').run(available ? 1 : 0, request.params.id)
   if (!result.changes) return response.status(403).json({ error: 'Only a verified responder can change availability.' })
-  return response.json({ responder: database.prepare('SELECT id, name, role, qualification, verified, available, verification_status FROM users WHERE id = ?').get(request.params.id) })
+  return response.json({ responder: database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, latitude, longitude, location_updated_at FROM users WHERE id = ?').get(request.params.id) })
 })
 
-function validCoordinate(value, minimum, maximum) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
-}
+app.patch('/api/responders/:id/location', (request, response) => {
+  const { latitude, longitude } = request.body || {}
+  if (!validCoordinate(latitude, -90, 90) || !validCoordinate(longitude, -180, 180)) {
+    return response.status(400).json({ error: 'Valid latitude and longitude are required.' })
+  }
+  const responder = database.prepare('SELECT id, verified FROM users WHERE id = ?').get(request.params.id)
+  if (!responder) return response.status(404).json({ error: 'Responder not found.' })
+  if (!responder.verified) return response.status(403).json({ error: 'Only a verified responder can update location.' })
+
+  const now = new Date().toISOString()
+  database.prepare('UPDATE users SET latitude = ?, longitude = ?, location_updated_at = ? WHERE id = ?').run(latitude, longitude, now, request.params.id)
+  const updatedResponder = database.prepare('SELECT id, name, role, qualification, verified, available, verification_status, latitude, longitude, location_updated_at FROM users WHERE id = ?').get(request.params.id)
+  return response.json({ responder: updatedResponder })
+})
 
 function saveScenePhoto(dataUrl) {
   if (!dataUrl) return null
@@ -92,9 +133,40 @@ app.post('/api/emergencies', (request, response) => {
 
   let photo
   try { photo = saveScenePhoto(scenePhoto) } catch (error) { return response.status(400).json({ error: error.message }) }
-  const result = database.prepare('INSERT INTO emergencies (emergency_type, description, latitude, longitude, scene_photo_filename, scene_photo_path) VALUES (?, ?, ?, ?, ?, ?)').run(emergencyType, description.trim(), latitude, longitude, photo?.filename || null, photo?.path || null)
+
+  const candidates = database.prepare(`
+    SELECT id, name, role, latitude, longitude, location_updated_at
+    FROM users
+    WHERE verified = 1 AND available = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL
+  `).all()
+
+  const matchedResponders = []
+  for (const candidate of candidates) {
+    if (!isLocationFresh(candidate.location_updated_at, LOCATION_STALE_MINUTES)) continue
+    const distance = calculateHaversineDistance(latitude, longitude, candidate.latitude, candidate.longitude)
+    if (distance <= MATCH_RADIUS_KM) {
+      matchedResponders.push({
+        id: candidate.id,
+        name: candidate.name,
+        role: candidate.role,
+        distance_km: Math.round(distance * 100) / 100,
+      })
+    }
+  }
+
+  const initialStatus = 'Searching for nearby responders'
+  const matchedCount = matchedResponders.length
+
+  const result = database.prepare(
+    'INSERT INTO emergencies (emergency_type, description, latitude, longitude, status, scene_photo_filename, scene_photo_path, matched_responder_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(emergencyType, description.trim(), latitude, longitude, initialStatus, photo?.filename || null, photo?.path || null, matchedCount)
+
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(result.lastInsertRowid)
-  return response.status(201).json({ emergency })
+  return response.status(201).json({
+    emergency,
+    matched_responder_count: matchedCount,
+    matched_responders: matchedResponders,
+  })
 })
 
 app.get('/api/emergencies/:id/photo', (request, response) => {
@@ -128,11 +200,50 @@ app.patch('/api/emergencies/:id/status', (request, response) => {
 
 app.get('/api/responder/emergencies', (request, response) => {
   const responderId = Number(request.query.responder_id)
-  const responder = database.prepare('SELECT id FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
-  if (!responder) return response.status(403).json({ error: 'A verified, available responder is required.' })
-  const latitude = Number(request.query.latitude)
-  const longitude = Number(request.query.longitude)
-  const emergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'accepted', 'rejected') ORDER BY created_at DESC").all().map((emergency) => ({ ...emergency, distance_km: validCoordinate(latitude, -90, 90) && validCoordinate(longitude, -180, 180) ? Math.round(Math.sqrt(((emergency.latitude - latitude) * 111) ** 2 + ((emergency.longitude - longitude) * 111 * Math.cos(latitude * Math.PI / 180)) ** 2) * 10) / 10 : null }))
+  const responder = database.prepare('SELECT id, verified, available, latitude, longitude, location_updated_at FROM users WHERE id = ?').get(responderId)
+  if (!responder || !responder.verified || !responder.available) {
+    return response.status(403).json({ error: 'A verified, available responder is required.' })
+  }
+
+  let lat = responder.latitude
+  let lon = responder.longitude
+  let locUpdatedAt = responder.location_updated_at
+
+  const queryLat = Number(request.query.latitude)
+  const queryLon = Number(request.query.longitude)
+  if (validCoordinate(queryLat, -90, 90) && validCoordinate(queryLon, -180, 180)) {
+    lat = queryLat
+    lon = queryLon
+    locUpdatedAt = new Date().toISOString()
+    database.prepare('UPDATE users SET latitude = ?, longitude = ?, location_updated_at = ? WHERE id = ?').run(lat, lon, locUpdatedAt, responderId)
+  }
+
+  const hasValidCoord = validCoordinate(lat, -90, 90) && validCoordinate(lon, -180, 180)
+  const isFresh = isLocationFresh(locUpdatedAt, LOCATION_STALE_MINUTES)
+
+  if (!hasValidCoord || !isFresh) {
+    return response.json({
+      emergencies: [],
+      location_status: !hasValidCoord ? 'missing' : 'stale',
+      message: !hasValidCoord
+        ? 'Location is required to find nearby emergencies within 1 km.'
+        : 'Location is stale (older than 15 minutes). Please update your location.',
+    })
+  }
+
+  const activeEmergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'accepted', 'rejected') ORDER BY created_at DESC").all()
+
+  const emergencies = []
+  for (const em of activeEmergencies) {
+    const distance = calculateHaversineDistance(lat, lon, em.latitude, em.longitude)
+    if (distance <= MATCH_RADIUS_KM) {
+      emergencies.push({
+        ...em,
+        distance_km: Math.round(distance * 10) / 10,
+      })
+    }
+  }
+
   return response.json({ emergencies })
 })
 
@@ -158,4 +269,5 @@ app.use((error, _request, response, _next) => {
   }
   return response.status(400).json({ error: error?.message || 'Invalid request.' })
 })
+
 app.listen(port, () => console.log(`Emergency API listening on http://localhost:${port}`))

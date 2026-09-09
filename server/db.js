@@ -42,6 +42,9 @@ const responderColumns = [
   ['document_path', 'TEXT'],
   ['password_hash', 'TEXT'],
   ['verification_status', "TEXT NOT NULL DEFAULT 'pending'"],
+  ['latitude', 'REAL'],
+  ['longitude', 'REAL'],
+  ['location_updated_at', 'TEXT'],
 ]
 for (const [name, definition] of responderColumns) {
   if (!userColumns.includes(name)) database.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`)
@@ -51,6 +54,7 @@ const emergencyColumns = database.prepare('PRAGMA table_info(emergencies)').all(
 const scenePhotoColumns = [
   ['scene_photo_filename', 'TEXT'],
   ['scene_photo_path', 'TEXT'],
+  ['matched_responder_count', 'INTEGER NOT NULL DEFAULT 0'],
 ]
 for (const [name, definition] of scenePhotoColumns) {
   if (!emergencyColumns.includes(name)) database.exec(`ALTER TABLE emergencies ADD COLUMN ${name} ${definition}`)
