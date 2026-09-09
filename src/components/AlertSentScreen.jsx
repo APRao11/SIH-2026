@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, MapPin, Radio } from 'lucide-react'
+import { Check, Clock3, MapPin, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 
 const guidance = {
@@ -9,24 +9,53 @@ const guidance = {
   Other: ['Check that the area is safe.', 'Keep the person comfortable and monitor breathing.', 'Continue professional emergency assistance immediately.'],
 }
 
+function parseTimestampMs(dateStr) {
+  if (!dateStr) return NaN
+  if (typeof dateStr === 'number') return dateStr
+  if (!dateStr.includes('T') && !dateStr.includes('Z')) {
+    return new Date(dateStr.replace(' ', 'T') + 'Z').getTime()
+  }
+  return new Date(dateStr).getTime()
+}
+
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
+  const [secondsRemaining, setSecondsRemaining] = useState(20)
+
   useEffect(() => {
     let active = true
     async function refresh() {
       try {
         const response = await fetch(`/api/emergencies/${emergency.id}`)
         const result = await response.json()
-        if (response.ok && active) setCurrent(result.emergency)
+        if (response.ok && active && result.emergency) {
+          setCurrent(result.emergency)
+        }
       } catch { /* Keep the last known emergency state visible. */ }
     }
     refresh()
-    const timer = window.setInterval(refresh, 10000)
+    const timer = window.setInterval(refresh, 3000)
     return () => { active = false; window.clearInterval(timer) }
   }, [emergency.id])
 
+  useEffect(() => {
+    if ((current.search_radius_km || 1.0) >= 2.0 || current.assigned_responder_id) return
+    const updateCountdown = () => {
+      const createdMs = parseTimestampMs(current.created_at)
+      if (!Number.isNaN(createdMs)) {
+        const elapsedSec = Math.floor((Date.now() - createdMs) / 1000)
+        const rem = Math.max(0, 20 - elapsedSec)
+        setSecondsRemaining(rem)
+      }
+    }
+    updateCountdown()
+    const interval = window.setInterval(updateCountdown, 1000)
+    return () => window.clearInterval(interval)
+  }, [current.created_at, current.search_radius_km, current.assigned_responder_id])
+
   const steps = guidance[current.emergency_type] || guidance.Other
   const matchedCount = current.matched_responder_count || 0
+  const searchRadius = Number(current.search_radius_km || 1.0)
 
   return (
     <section className="mx-auto max-w-5xl">
@@ -46,10 +75,14 @@ export default function AlertSentScreen({ emergency, onBack }) {
               <Radio className="size-5 text-emerald-600" />
               <strong className="text-xl text-slate-950">{current.status}</strong>
             </div>
-            <div className="mt-5 grid gap-3 border-t border-slate-200 pt-5 text-sm sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 border-t border-slate-200 pt-5 text-sm sm:grid-cols-3">
               <div>
                 <span className="detail-label">Emergency type</span>
                 <strong>{current.emergency_type}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Search radius</span>
+                <strong className={searchRadius >= 2.0 ? 'text-amber-800' : 'text-slate-950'}>{searchRadius} km</strong>
               </div>
               <div>
                 <span className="detail-label">Live location</span>
@@ -65,10 +98,29 @@ export default function AlertSentScreen({ emergency, onBack }) {
                 </p>
               </div>
             ) : (
-              <div className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-                {matchedCount > 0
-                  ? `Alert sent to ${matchedCount} nearby verified responder${matchedCount > 1 ? 's' : ''}.`
-                  : 'Searching for nearby verified responders...'}
+              <div className={`mt-5 rounded-lg p-4 text-sm ${searchRadius >= 2.0 ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'bg-amber-50 text-amber-900'}`}>
+                <div className="flex items-center justify-between gap-2 font-semibold">
+                  <div className="flex items-center gap-2">
+                    <Search className="size-4 text-amber-700" />
+                    <span>
+                      {searchRadius >= 2.0 ? 'Expanded Search (2 km)' : 'Initial Search (1 km)'}
+                    </span>
+                  </div>
+                  {searchRadius < 2.0 && (
+                    <span className="text-xs font-normal text-amber-700">
+                      Auto-expanding in {secondsRemaining}s
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-amber-800">
+                  {searchRadius >= 2.0
+                    ? matchedCount > 0
+                      ? `Search expanded to 2 km. Alert sent to ${matchedCount} nearby verified responder${matchedCount > 1 ? 's' : ''}.`
+                      : 'Expanding search to 2 km... Searching for nearby verified responders within 2 km.'
+                    : matchedCount > 0
+                      ? `Alert sent to ${matchedCount} nearby verified responder${matchedCount > 1 ? 's' : ''} within 1 km.`
+                      : 'Searching within 1 km for nearby verified responders...'}
+                </p>
               </div>
             )}
           </div>

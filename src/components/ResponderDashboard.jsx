@@ -57,7 +57,7 @@ export default function ResponderDashboard({ responder }) {
 
   function getAndSyncLocation(onSuccess, onError) {
     if (!navigator.geolocation) {
-      setLocationWarning('Geolocation is not supported by your browser. Location is required for 1 km emergency matching.')
+      setLocationWarning('Geolocation is not supported by your browser. Location is required for nearby emergency matching.')
       if (onError) onError()
       return
     }
@@ -67,7 +67,7 @@ export default function ResponderDashboard({ responder }) {
         if (onSuccess) onSuccess(coords.latitude, coords.longitude)
       },
       (error) => {
-        setLocationWarning('Location access is required for nearby emergency matching (within 1 km). Please enable location in your browser.')
+        setLocationWarning('Location access is required for nearby emergency matching. Please enable location in your browser.')
         if (onError) onError(error)
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
@@ -93,7 +93,7 @@ export default function ResponderDashboard({ responder }) {
         (lat, lng) => load(lat, lng),
         () => load()
       )
-    }, 30000)
+    }, 15000)
     return () => window.clearInterval(interval)
   }, [responderId, available])
 
@@ -241,7 +241,7 @@ export default function ResponderDashboard({ responder }) {
                 <MapPin className="size-4" />
                 {emergency.distance_km === null
                   ? 'Distance unavailable'
-                  : `${emergency.distance_km} km away (within 1 km response radius)`}
+                  : `${emergency.distance_km} km away (search radius: ${emergency.search_radius_km || 1} km)`}
               </div>
               <div className="mt-5 flex gap-2">
                 <button
@@ -269,7 +269,7 @@ export default function ResponderDashboard({ responder }) {
               <RefreshCw className="mx-auto size-6 text-slate-400" />
               <p className="mt-3 text-sm text-slate-500">
                 {available
-                  ? 'No active emergencies within 1 km right now.'
+                  ? 'No active emergencies in your area right now.'
                   : 'You are currently offline. Go online to receive nearby emergency alerts.'}
               </p>
             </div>

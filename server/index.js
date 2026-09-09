@@ -11,7 +11,7 @@ dotenv.config()
 const app = express()
 const port = Number(process.env.PORT || 3001)
 const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Other'])
-const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Responder found', 'Help on the way'])
+const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Help on the way'])
 const responderStatuses = new Set(['accepted', 'rejected'])
 const roles = new Set(['Doctor', 'Medical Student', 'Trained Volunteer'])
 const uploadDirectory = process.env.UPLOAD_DIR || './data/uploads'
@@ -19,11 +19,22 @@ const scenePhotoDirectory = join(uploadDirectory, 'emergency-scenes')
 mkdirSync(uploadDirectory, { recursive: true })
 mkdirSync(scenePhotoDirectory, { recursive: true })
 
-const MATCH_RADIUS_KM = 1.0
+const INITIAL_SEARCH_RADIUS_KM = 1.0
+const EXPANDED_SEARCH_RADIUS_KM = 2.0
+const RADIUS_EXPANSION_TIMEOUT_MS = 20 * 1000 // 20 seconds for responsive prototype verification
 const LOCATION_STALE_MINUTES = 15
 
 function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
+}
+
+function parseTimestampMs(dateStr) {
+  if (!dateStr) return NaN
+  if (typeof dateStr === 'number') return dateStr
+  if (!dateStr.includes('T') && !dateStr.includes('Z')) {
+    return new Date(dateStr.replace(' ', 'T') + 'Z').getTime()
+  }
+  return new Date(dateStr).getTime()
 }
 
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
@@ -42,10 +53,72 @@ function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
 
 function isLocationFresh(locationUpdatedAt, maxMinutes = LOCATION_STALE_MINUTES) {
   if (!locationUpdatedAt) return false
-  const updatedTime = new Date(locationUpdatedAt).getTime()
+  const updatedTime = parseTimestampMs(locationUpdatedAt)
   if (Number.isNaN(updatedTime)) return false
   const elapsedMs = Date.now() - updatedTime
   return elapsedMs >= 0 && elapsedMs <= maxMinutes * 60 * 1000
+}
+
+function findEligibleResponders() {
+  return database.prepare(`
+    SELECT id, name, role, latitude, longitude, location_updated_at
+    FROM users
+    WHERE verified = 1 AND available = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL
+  `).all().filter((candidate) => isLocationFresh(candidate.location_updated_at, LOCATION_STALE_MINUTES))
+}
+
+function checkAndExpandEmergencyRadius(emergency) {
+  if (!emergency) return emergency
+  if (emergency.assigned_responder_id || ['accepted', 'Help on the way', 'rejected'].includes(emergency.status)) {
+    return emergency
+  }
+  const currentRadius = Number(emergency.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
+  if (currentRadius >= EXPANDED_SEARCH_RADIUS_KM) {
+    return emergency
+  }
+
+  const createdTime = parseTimestampMs(emergency.created_at)
+  if (Number.isNaN(createdTime)) return emergency
+  const elapsedMs = Date.now() - createdTime
+
+  if (elapsedMs >= RADIUS_EXPANSION_TIMEOUT_MS) {
+    const freshCandidates = findEligibleResponders()
+    let previouslyMatchedIds = []
+    try {
+      previouslyMatchedIds = JSON.parse(emergency.matched_responder_ids || '[]')
+    } catch {
+      previouslyMatchedIds = []
+    }
+
+    const allMatchedIdsSet = new Set(previouslyMatchedIds)
+    for (const candidate of freshCandidates) {
+      const distance = calculateHaversineDistance(emergency.latitude, emergency.longitude, candidate.latitude, candidate.longitude)
+      if (distance <= EXPANDED_SEARCH_RADIUS_KM) {
+        allMatchedIdsSet.add(candidate.id)
+      }
+    }
+
+    const updatedMatchedIds = Array.from(allMatchedIdsSet)
+    const newStatus = 'Expanding search to 2 km'
+    const nowIso = new Date().toISOString()
+
+    database.prepare(`
+      UPDATE emergencies
+      SET search_radius_km = ?, radius_expanded_at = ?, matched_responder_count = ?, matched_responder_ids = ?, status = ?
+      WHERE id = ?
+    `).run(EXPANDED_SEARCH_RADIUS_KM, nowIso, updatedMatchedIds.length, JSON.stringify(updatedMatchedIds), newStatus, emergency.id)
+
+    return database.prepare(`
+      SELECT e.*, 
+        CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
+        CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
+      FROM emergencies e 
+      LEFT JOIN users u ON u.id = e.assigned_responder_id 
+      WHERE e.id = ?
+    `).get(emergency.id)
+  }
+
+  return emergency
 }
 
 const upload = multer({
@@ -134,32 +207,30 @@ app.post('/api/emergencies', (request, response) => {
   let photo
   try { photo = saveScenePhoto(scenePhoto) } catch (error) { return response.status(400).json({ error: error.message }) }
 
-  const candidates = database.prepare(`
-    SELECT id, name, role, latitude, longitude, location_updated_at
-    FROM users
-    WHERE verified = 1 AND available = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL
-  `).all()
+  const candidates = findEligibleResponders()
 
   const matchedResponders = []
+  const matchedIds = []
   for (const candidate of candidates) {
-    if (!isLocationFresh(candidate.location_updated_at, LOCATION_STALE_MINUTES)) continue
     const distance = calculateHaversineDistance(latitude, longitude, candidate.latitude, candidate.longitude)
-    if (distance <= MATCH_RADIUS_KM) {
+    if (distance <= INITIAL_SEARCH_RADIUS_KM) {
       matchedResponders.push({
         id: candidate.id,
         name: candidate.name,
         role: candidate.role,
         distance_km: Math.round(distance * 100) / 100,
       })
+      matchedIds.push(candidate.id)
     }
   }
 
   const initialStatus = 'Searching for nearby responders'
   const matchedCount = matchedResponders.length
+  const nowIso = new Date().toISOString()
 
   const result = database.prepare(
-    'INSERT INTO emergencies (emergency_type, description, latitude, longitude, status, scene_photo_filename, scene_photo_path, matched_responder_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(emergencyType, description.trim(), latitude, longitude, initialStatus, photo?.filename || null, photo?.path || null, matchedCount)
+    'INSERT INTO emergencies (emergency_type, description, latitude, longitude, created_at, status, scene_photo_filename, scene_photo_path, matched_responder_count, search_radius_km, matched_responder_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(emergencyType, description.trim(), latitude, longitude, nowIso, initialStatus, photo?.filename || null, photo?.path || null, matchedCount, INITIAL_SEARCH_RADIUS_KM, JSON.stringify(matchedIds))
 
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(result.lastInsertRowid)
   return response.status(201).json({
@@ -179,13 +250,14 @@ app.get('/api/emergencies/:id/photo', (request, response) => {
 })
 
 app.get('/api/emergencies', (_request, response) => {
-  const emergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'rejected') ORDER BY created_at DESC").all()
+  const emergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'rejected') ORDER BY created_at DESC").all().map(checkAndExpandEmergencyRadius)
   return response.json({ emergencies })
 })
 
 app.get('/api/emergencies/:id', (request, response) => {
-  const emergency = database.prepare("SELECT e.*, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role FROM emergencies e LEFT JOIN users u ON u.id = e.assigned_responder_id WHERE e.id = ?").get(request.params.id)
+  let emergency = database.prepare("SELECT e.*, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role FROM emergencies e LEFT JOIN users u ON u.id = e.assigned_responder_id WHERE e.id = ?").get(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+  emergency = checkAndExpandEmergencyRadius(emergency)
   return response.json({ emergency })
 })
 
@@ -226,7 +298,7 @@ app.get('/api/responder/emergencies', (request, response) => {
       emergencies: [],
       location_status: !hasValidCoord ? 'missing' : 'stale',
       message: !hasValidCoord
-        ? 'Location is required to find nearby emergencies within 1 km.'
+        ? 'Location is required to find nearby emergencies.'
         : 'Location is stale (older than 15 minutes). Please update your location.',
     })
   }
@@ -234,9 +306,11 @@ app.get('/api/responder/emergencies', (request, response) => {
   const activeEmergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'accepted', 'rejected') ORDER BY created_at DESC").all()
 
   const emergencies = []
-  for (const em of activeEmergencies) {
+  for (let em of activeEmergencies) {
+    em = checkAndExpandEmergencyRadius(em)
+    const allowedRadius = Number(em.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
     const distance = calculateHaversineDistance(lat, lon, em.latitude, em.longitude)
-    if (distance <= MATCH_RADIUS_KM) {
+    if (distance <= allowedRadius) {
       emergencies.push({
         ...em,
         distance_km: Math.round(distance * 10) / 10,

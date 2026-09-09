@@ -55,9 +55,13 @@ const scenePhotoColumns = [
   ['scene_photo_filename', 'TEXT'],
   ['scene_photo_path', 'TEXT'],
   ['matched_responder_count', 'INTEGER NOT NULL DEFAULT 0'],
+  ['search_radius_km', 'REAL NOT NULL DEFAULT 1.0'],
+  ['radius_expanded_at', 'TEXT'],
+  ['matched_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
 ]
 for (const [name, definition] of scenePhotoColumns) {
   if (!emergencyColumns.includes(name)) database.exec(`ALTER TABLE emergencies ADD COLUMN ${name} ${definition}`)
 }
 
 export default database
+
