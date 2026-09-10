@@ -30,6 +30,16 @@ database.exec(`
     assigned_responder_id INTEGER,
     FOREIGN KEY (assigned_responder_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS emergency_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    emergency_id INTEGER NOT NULL,
+    responder_id INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (emergency_id) REFERENCES emergencies(id),
+    FOREIGN KEY (responder_id) REFERENCES users(id),
+    UNIQUE(emergency_id, responder_id)
+  );
 `)
 
 const userColumns = database.prepare('PRAGMA table_info(users)').all().map(({ name }) => name)
@@ -58,6 +68,8 @@ const scenePhotoColumns = [
   ['search_radius_km', 'REAL NOT NULL DEFAULT 1.0'],
   ['radius_expanded_at', 'TEXT'],
   ['matched_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
+  ['accepted_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
+  ['rejected_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
 ]
 for (const [name, definition] of scenePhotoColumns) {
   if (!emergencyColumns.includes(name)) database.exec(`ALTER TABLE emergencies ADD COLUMN ${name} ${definition}`)

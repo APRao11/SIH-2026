@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, MapPin, Radio, Search } from 'lucide-react'
+import { Check, MapPin, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 
 const guidance = {
@@ -89,12 +89,26 @@ export default function AlertSentScreen({ emergency, onBack }) {
                 <strong>{current.latitude.toFixed(6)}, {current.longitude.toFixed(6)}</strong>
               </div>
             </div>
-            {current.assigned_responder_id ? (
-              <div className="mt-5 rounded-lg bg-emerald-50 p-4 text-sm">
-                <strong className="text-emerald-900">Assigned responder</strong>
-                <p className="mt-1 text-emerald-800">Verified responder assigned</p>
-                <p className="mt-2 flex items-center gap-2 text-emerald-700">
-                  <Clock3 className="size-4" />Responder ETA is not available yet.
+            {current.assigned_responder_id || (current.accepted_count && current.accepted_count > 0) ? (
+              <div className="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <strong className="text-emerald-950 font-bold">
+                    {current.accepted_count > 1
+                      ? `${current.accepted_count} Community Responders Accepted`
+                      : 'Verified Responder Accepted'}
+                  </strong>
+                  <span className="badge verified">Help on the way</span>
+                </div>
+                <p className="mt-1 text-emerald-800">
+                  {current.accepted_count > 1
+                    ? `${current.accepted_count} nearby medical/trained volunteers have accepted this alert and are heading to your location.`
+                    : current.responder_name
+                    ? `${current.responder_name} (${current.responder_role || 'Verified Responder'}) is responding.`
+                    : 'A verified community responder has accepted your emergency alert and is en route.'}
+                </p>
+                <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                  <Check className="size-4 text-emerald-600" />
+                  Radius expansion locked • Responder live coordination active
                 </p>
               </div>
             ) : (

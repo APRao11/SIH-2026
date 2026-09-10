@@ -3,7 +3,7 @@ import dotenv from 'dotenv'
 import database from './db.js'
 import multer from 'multer'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { extname, join } from 'node:path'
+import { extname, join, resolve } from 'node:path'
 import { randomUUID, scryptSync } from 'node:crypto'
 
 dotenv.config()
@@ -11,7 +11,7 @@ dotenv.config()
 const app = express()
 const port = Number(process.env.PORT || 3001)
 const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Other'])
-const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Help on the way'])
+const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Help on the way', 'accepted', 'rejected'])
 const responderStatuses = new Set(['accepted', 'rejected'])
 const roles = new Set(['Doctor', 'Medical Student', 'Trained Volunteer'])
 const uploadDirectory = process.env.UPLOAD_DIR || './data/uploads'
@@ -26,6 +26,12 @@ const LOCATION_STALE_MINUTES = 15
 
 function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
+}
+
+function calculateEtaMinutes(distanceKm) {
+  if (typeof distanceKm !== 'number' || !Number.isFinite(distanceKm)) return null
+  // Average urban responder transit speed (~20 km/h = 3 min/km) with a minimum of 1 minute
+  return Math.max(1, Math.round(distanceKm * 3))
 }
 
 function parseTimestampMs(dateStr) {
@@ -69,7 +75,14 @@ function findEligibleResponders() {
 
 function checkAndExpandEmergencyRadius(emergency) {
   if (!emergency) return emergency
-  if (emergency.assigned_responder_id || ['accepted', 'Help on the way', 'rejected'].includes(emergency.status)) {
+  let acceptedIds = []
+  try {
+    acceptedIds = JSON.parse(emergency.accepted_responder_ids || '[]')
+  } catch {
+    acceptedIds = []
+  }
+  // Stop expansion if responder assigned, any responder accepted, or emergency is closed/resolved
+  if (emergency.assigned_responder_id || acceptedIds.length > 0 || ['accepted', 'Help on the way', 'rejected'].includes(emergency.status)) {
     return emergency
   }
   const currentRadius = Number(emergency.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
@@ -158,7 +171,7 @@ app.patch('/api/responders/:id/verification', (request, response) => {
 app.get('/api/responders/:id/document', (request, response) => {
   const responder = database.prepare('SELECT document_path, document_filename FROM users WHERE id = ?').get(request.params.id)
   if (!responder?.document_path) return response.status(404).json({ error: 'Document not found.' })
-  return response.download(responder.document_path, responder.document_filename)
+  return response.download(resolve(responder.document_path), responder.document_filename)
 })
 
 app.patch('/api/responders/:id/availability', (request, response) => {
@@ -242,11 +255,13 @@ app.post('/api/emergencies', (request, response) => {
 
 app.get('/api/emergencies/:id/photo', (request, response) => {
   const responderId = Number(request.query.responder_id)
-  const responder = database.prepare('SELECT id FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
-  if (!responder) return response.status(403).json({ error: 'A verified, available responder is required.' })
+  // Allow verified responders (available OR accepted) to view scene photos
+  const responder = database.prepare('SELECT id FROM users WHERE id = ? AND verified = 1').get(responderId)
+  if (!responder) return response.status(403).json({ error: 'A verified responder is required.' })
   const emergency = database.prepare('SELECT scene_photo_path, scene_photo_filename FROM emergencies WHERE id = ?').get(request.params.id)
   if (!emergency?.scene_photo_path) return response.status(404).json({ error: 'Scene photo not found.' })
-  return response.sendFile(emergency.scene_photo_path, { headers: { 'Content-Disposition': `inline; filename="${emergency.scene_photo_filename}"` } })
+  const absolutePath = resolve(emergency.scene_photo_path)
+  return response.sendFile(absolutePath, { headers: { 'Content-Disposition': `inline; filename="${emergency.scene_photo_filename}"` } })
 })
 
 app.get('/api/emergencies', (_request, response) => {
@@ -255,10 +270,32 @@ app.get('/api/emergencies', (_request, response) => {
 })
 
 app.get('/api/emergencies/:id', (request, response) => {
-  let emergency = database.prepare("SELECT e.*, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role FROM emergencies e LEFT JOIN users u ON u.id = e.assigned_responder_id WHERE e.id = ?").get(request.params.id)
+  let emergency = database.prepare(`
+    SELECT e.*, 
+      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
+      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
+    FROM emergencies e 
+    LEFT JOIN users u ON u.id = e.assigned_responder_id 
+    WHERE e.id = ?
+  `).get(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
   emergency = checkAndExpandEmergencyRadius(emergency)
-  return response.json({ emergency })
+
+  const acceptedResponders = database.prepare(`
+    SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at
+    FROM emergency_responses er
+    JOIN users u ON u.id = er.responder_id
+    WHERE er.emergency_id = ? AND er.status = 'accepted'
+    ORDER BY er.created_at ASC
+  `).all(emergency.id)
+
+  return response.json({
+    emergency: {
+      ...emergency,
+      accepted_responders: acceptedResponders,
+      accepted_count: acceptedResponders.length,
+    },
+  })
 })
 
 app.patch('/api/emergencies/:id/status', (request, response) => {
@@ -303,18 +340,42 @@ app.get('/api/responder/emergencies', (request, response) => {
     })
   }
 
-  const activeEmergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'accepted', 'rejected') ORDER BY created_at DESC").all()
+  const allEmergencies = database.prepare("SELECT * FROM emergencies ORDER BY created_at DESC").all()
 
   const emergencies = []
-  for (let em of activeEmergencies) {
+  for (let em of allEmergencies) {
     em = checkAndExpandEmergencyRadius(em)
     const allowedRadius = Number(em.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
     const distance = calculateHaversineDistance(lat, lon, em.latitude, em.longitude)
-    if (distance <= allowedRadius) {
-      emergencies.push({
-        ...em,
-        distance_km: Math.round(distance * 10) / 10,
-      })
+    const roundedDistance = Math.round(distance * 10) / 10
+    const etaMinutes = calculateEtaMinutes(distance)
+
+    const responseRow = database.prepare('SELECT status, created_at FROM emergency_responses WHERE emergency_id = ? AND responder_id = ?').get(em.id, responderId)
+    const userResponseStatus = responseRow?.status || 'incoming'
+
+    const acceptedResponders = database.prepare(`
+      SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at
+      FROM emergency_responses er
+      JOIN users u ON u.id = er.responder_id
+      WHERE er.emergency_id = ? AND er.status = 'accepted'
+      ORDER BY er.created_at ASC
+    `).all(em.id)
+
+    const emergencyItem = {
+      ...em,
+      distance_km: roundedDistance,
+      eta_minutes: etaMinutes,
+      search_radius_km: allowedRadius,
+      search_stage: allowedRadius >= 2.0 ? 'Stage 2 (2.0 km expanded)' : 'Stage 1 (1.0 km initial)',
+      responder_status: userResponseStatus,
+      accepted_responders: acceptedResponders,
+      accepted_count: acceptedResponders.length,
+    }
+
+    if (userResponseStatus === 'accepted' || userResponseStatus === 'rejected') {
+      emergencies.push(emergencyItem)
+    } else if (distance <= allowedRadius) {
+      emergencies.push(emergencyItem)
     }
   }
 
@@ -323,17 +384,118 @@ app.get('/api/responder/emergencies', (request, response) => {
 
 app.patch('/api/emergencies/:id/accept', (request, response) => {
   const responderId = Number(request.body?.responder_id)
-  const responder = database.prepare('SELECT id FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
+  if (!responderId) return response.status(400).json({ error: 'Responder ID is required.' })
+
+  const responder = database.prepare('SELECT id, name, role, verified, available FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
   if (!responder) return response.status(403).json({ error: 'A verified, available responder is required.' })
-  const result = database.prepare("UPDATE emergencies SET assigned_responder_id = ?, status = 'accepted' WHERE id = ? AND status NOT IN ('accepted', 'Help on the way')").run(responderId, request.params.id)
-  if (!result.changes) return response.status(409).json({ error: 'Emergency is no longer available.' })
-  return response.json({ emergency: database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id) })
+
+  const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+
+  const nowIso = new Date().toISOString()
+  database.prepare(`
+    INSERT INTO emergency_responses (emergency_id, responder_id, status, created_at)
+    VALUES (?, ?, 'accepted', ?)
+    ON CONFLICT(emergency_id, responder_id) DO UPDATE SET status = 'accepted', created_at = ?
+  `).run(emergency.id, responderId, nowIso, nowIso)
+
+  const acceptedRows = database.prepare("SELECT responder_id FROM emergency_responses WHERE emergency_id = ? AND status = 'accepted'").all(emergency.id)
+  const acceptedIds = acceptedRows.map((r) => r.responder_id)
+
+  let rejectedIds = []
+  try { rejectedIds = JSON.parse(emergency.rejected_responder_ids || '[]') } catch { rejectedIds = [] }
+  rejectedIds = rejectedIds.filter((id) => id !== responderId)
+
+  const assignedResponderId = emergency.assigned_responder_id || responderId
+  database.prepare(`
+    UPDATE emergencies
+    SET status = 'accepted',
+        assigned_responder_id = ?,
+        accepted_responder_ids = ?,
+        rejected_responder_ids = ?
+    WHERE id = ?
+  `).run(assignedResponderId, JSON.stringify(acceptedIds), JSON.stringify(rejectedIds), emergency.id)
+
+  const updatedEmergency = database.prepare(`
+    SELECT e.*, 
+      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
+      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
+    FROM emergencies e 
+    LEFT JOIN users u ON u.id = e.assigned_responder_id 
+    WHERE e.id = ?
+  `).get(emergency.id)
+
+  const acceptedResponders = database.prepare(`
+    SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at
+    FROM emergency_responses er
+    JOIN users u ON u.id = er.responder_id
+    WHERE er.emergency_id = ? AND er.status = 'accepted'
+    ORDER BY er.created_at ASC
+  `).all(emergency.id)
+
+  return response.json({
+    emergency: { ...updatedEmergency, accepted_responders: acceptedResponders, accepted_count: acceptedResponders.length },
+    accepted_responder_ids: acceptedIds,
+    message: 'Emergency accepted successfully. You are now responding to this alert.',
+  })
 })
 
 app.patch('/api/emergencies/:id/reject', (request, response) => {
-  const result = database.prepare("UPDATE emergencies SET status = 'rejected' WHERE id = ? AND status NOT IN ('accepted', 'Help on the way')").run(request.params.id)
-  if (!result.changes) return response.status(409).json({ error: 'Emergency is no longer available.' })
-  return response.json({ emergency: database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id) })
+  const responderId = Number(request.body?.responder_id || request.query.responder_id)
+  if (!responderId) return response.status(400).json({ error: 'Responder ID is required.' })
+
+  const responder = database.prepare('SELECT id, verified FROM users WHERE id = ?').get(responderId)
+  if (!responder || !responder.verified) return response.status(403).json({ error: 'A verified responder is required.' })
+
+  const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+
+  const nowIso = new Date().toISOString()
+  database.prepare(`
+    INSERT INTO emergency_responses (emergency_id, responder_id, status, created_at)
+    VALUES (?, ?, 'rejected', ?)
+    ON CONFLICT(emergency_id, responder_id) DO UPDATE SET status = 'rejected', created_at = ?
+  `).run(emergency.id, responderId, nowIso, nowIso)
+
+  const rejectedRows = database.prepare("SELECT responder_id FROM emergency_responses WHERE emergency_id = ? AND status = 'rejected'").all(emergency.id)
+  const rejectedIds = rejectedRows.map((r) => r.responder_id)
+
+  let acceptedIds = []
+  try { acceptedIds = JSON.parse(emergency.accepted_responder_ids || '[]') } catch { acceptedIds = [] }
+  acceptedIds = acceptedIds.filter((id) => id !== responderId)
+
+  let assignedResponderId = emergency.assigned_responder_id
+  let nextStatus = emergency.status
+  if (assignedResponderId === responderId) {
+    assignedResponderId = acceptedIds.length > 0 ? acceptedIds[0] : null
+    if (!assignedResponderId && nextStatus === 'accepted') {
+      nextStatus = (emergency.search_radius_km || 1.0) >= 2.0 ? 'Expanding search to 2 km' : 'Searching for nearby responders'
+    }
+  }
+
+  database.prepare(`
+    UPDATE emergencies
+    SET assigned_responder_id = ?,
+        status = ?,
+        rejected_responder_ids = ?,
+        accepted_responder_ids = ?
+    WHERE id = ?
+  `).run(assignedResponderId, nextStatus, JSON.stringify(rejectedIds), JSON.stringify(acceptedIds), emergency.id)
+
+  const updatedEmergency = database.prepare(`
+    SELECT e.*, 
+      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
+      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
+    FROM emergencies e 
+    LEFT JOIN users u ON u.id = e.assigned_responder_id 
+    WHERE e.id = ?
+  `).get(emergency.id)
+
+  return response.json({
+    emergency: updatedEmergency,
+    rejected_responder_ids: rejectedIds,
+    message: 'Emergency declined for this responder.',
+  })
 })
 
 app.use((error, _request, response, _next) => {
