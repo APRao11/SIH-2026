@@ -11,7 +11,7 @@ dotenv.config()
 const app = express()
 const port = Number(process.env.PORT || 3001)
 const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Other'])
-const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Help on the way', 'accepted', 'rejected'])
+const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Primary responder selected', 'Help on the way', 'accepted', 'rejected'])
 const responderStatuses = new Set(['accepted', 'rejected'])
 const roles = new Set(['Doctor', 'Medical Student', 'Trained Volunteer'])
 const uploadDirectory = process.env.UPLOAD_DIR || './data/uploads'
@@ -23,6 +23,10 @@ const INITIAL_SEARCH_RADIUS_KM = 1.0
 const EXPANDED_SEARCH_RADIUS_KM = 2.0
 const RADIUS_EXPANSION_TIMEOUT_MS = 20 * 1000 // 20 seconds for responsive prototype verification
 const LOCATION_STALE_MINUTES = 15
+// No routing/traffic provider is configured for this MVP. Reassign only when the
+// newly accepted responder is at least one estimated minute faster.
+const PRIMARY_ETA_IMPROVEMENT_MINUTES = 1
+const ETA_METHOD = 'straight_line_distance_estimate'
 
 function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
@@ -71,6 +75,45 @@ function findEligibleResponders() {
     FROM users
     WHERE verified = 1 AND available = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL
   `).all().filter((candidate) => isLocationFresh(candidate.location_updated_at, LOCATION_STALE_MINUTES))
+}
+
+function getEmergencyWithPrimary(emergencyId) {
+  return database.prepare(`
+    SELECT e.*, u.name AS responder_name, u.role AS responder_role
+    FROM emergencies e
+    LEFT JOIN users u ON u.id = e.assigned_responder_id
+    WHERE e.id = ?
+  `).get(emergencyId)
+}
+
+function getAcceptedResponders(emergencyId) {
+  return database.prepare(`
+    SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at,
+      er.eta_minutes, er.eta_distance_km, er.eta_method
+    FROM emergency_responses er
+    JOIN users u ON u.id = er.responder_id
+    WHERE er.emergency_id = ? AND er.status = 'accepted'
+    ORDER BY er.eta_minutes ASC, er.created_at ASC, u.id ASC
+  `).all(emergencyId)
+}
+
+function selectPrimaryResponder(emergency) {
+  const acceptedResponders = getAcceptedResponders(emergency.id)
+  const best = acceptedResponders.find((responder) => Number.isFinite(responder.eta_minutes))
+  if (!best) return { primary: null, acceptedResponders, changed: false }
+
+  const current = acceptedResponders.find((responder) => responder.id === emergency.assigned_responder_id)
+  const shouldReplace = !current || !Number.isFinite(current.eta_minutes) ||
+    (best.id !== current.id && best.eta_minutes <= current.eta_minutes - PRIMARY_ETA_IMPROVEMENT_MINUTES)
+  const primary = shouldReplace ? best : current
+  return { primary, acceptedResponders, changed: shouldReplace }
+}
+
+function decorateAcceptedResponders(acceptedResponders, primaryResponderId) {
+  return acceptedResponders.map((responder) => ({
+    ...responder,
+    assignment_role: responder.id === primaryResponderId ? 'primary' : 'secondary',
+  }))
 }
 
 function checkAndExpandEmergencyRadius(emergency) {
@@ -270,29 +313,17 @@ app.get('/api/emergencies', (_request, response) => {
 })
 
 app.get('/api/emergencies/:id', (request, response) => {
-  let emergency = database.prepare(`
-    SELECT e.*, 
-      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
-      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
-    FROM emergencies e 
-    LEFT JOIN users u ON u.id = e.assigned_responder_id 
-    WHERE e.id = ?
-  `).get(request.params.id)
+  let emergency = getEmergencyWithPrimary(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
   emergency = checkAndExpandEmergencyRadius(emergency)
 
-  const acceptedResponders = database.prepare(`
-    SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at
-    FROM emergency_responses er
-    JOIN users u ON u.id = er.responder_id
-    WHERE er.emergency_id = ? AND er.status = 'accepted'
-    ORDER BY er.created_at ASC
-  `).all(emergency.id)
+  emergency = getEmergencyWithPrimary(emergency.id)
+  const acceptedResponders = getAcceptedResponders(emergency.id)
 
   return response.json({
     emergency: {
       ...emergency,
-      accepted_responders: acceptedResponders,
+      accepted_responders: decorateAcceptedResponders(acceptedResponders, emergency.assigned_responder_id),
       accepted_count: acceptedResponders.length,
     },
   })
@@ -353,13 +384,7 @@ app.get('/api/responder/emergencies', (request, response) => {
     const responseRow = database.prepare('SELECT status, created_at FROM emergency_responses WHERE emergency_id = ? AND responder_id = ?').get(em.id, responderId)
     const userResponseStatus = responseRow?.status || 'incoming'
 
-    const acceptedResponders = database.prepare(`
-      SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at
-      FROM emergency_responses er
-      JOIN users u ON u.id = er.responder_id
-      WHERE er.emergency_id = ? AND er.status = 'accepted'
-      ORDER BY er.created_at ASC
-    `).all(em.id)
+    const acceptedResponders = getAcceptedResponders(em.id)
 
     const emergencyItem = {
       ...em,
@@ -368,7 +393,11 @@ app.get('/api/responder/emergencies', (request, response) => {
       search_radius_km: allowedRadius,
       search_stage: allowedRadius >= 2.0 ? 'Stage 2 (2.0 km expanded)' : 'Stage 1 (1.0 km initial)',
       responder_status: userResponseStatus,
-      accepted_responders: acceptedResponders,
+      accepted_responders: decorateAcceptedResponders(acceptedResponders, em.assigned_responder_id),
+      responder_assignment_role: userResponseStatus === 'accepted'
+        ? (em.assigned_responder_id === responderId ? 'primary' : 'secondary')
+        : null,
+      eta_method: ETA_METHOD,
       accepted_count: acceptedResponders.length,
     }
 
@@ -386,18 +415,24 @@ app.patch('/api/emergencies/:id/accept', (request, response) => {
   const responderId = Number(request.body?.responder_id)
   if (!responderId) return response.status(400).json({ error: 'Responder ID is required.' })
 
-  const responder = database.prepare('SELECT id, name, role, verified, available FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
+  const responder = database.prepare('SELECT id, name, role, verified, available, latitude, longitude, location_updated_at FROM users WHERE id = ? AND verified = 1 AND available = 1').get(responderId)
   if (!responder) return response.status(403).json({ error: 'A verified, available responder is required.' })
+  if (!validCoordinate(responder.latitude, -90, 90) || !validCoordinate(responder.longitude, -180, 180) || !isLocationFresh(responder.location_updated_at, LOCATION_STALE_MINUTES)) {
+    return response.status(403).json({ error: 'A fresh responder location is required to accept an emergency.' })
+  }
 
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
 
   const nowIso = new Date().toISOString()
+  const etaDistanceKm = calculateHaversineDistance(responder.latitude, responder.longitude, emergency.latitude, emergency.longitude)
+  const etaMinutes = calculateEtaMinutes(etaDistanceKm)
   database.prepare(`
-    INSERT INTO emergency_responses (emergency_id, responder_id, status, created_at)
-    VALUES (?, ?, 'accepted', ?)
-    ON CONFLICT(emergency_id, responder_id) DO UPDATE SET status = 'accepted', created_at = ?
-  `).run(emergency.id, responderId, nowIso, nowIso)
+    INSERT INTO emergency_responses (emergency_id, responder_id, status, created_at, eta_minutes, eta_distance_km, eta_method)
+    VALUES (?, ?, 'accepted', ?, ?, ?, ?)
+    ON CONFLICT(emergency_id, responder_id) DO UPDATE SET
+      status = 'accepted', created_at = ?, eta_minutes = ?, eta_distance_km = ?, eta_method = ?
+  `).run(emergency.id, responderId, nowIso, etaMinutes, etaDistanceKm, ETA_METHOD, nowIso, etaMinutes, etaDistanceKm, ETA_METHOD)
 
   const acceptedRows = database.prepare("SELECT responder_id FROM emergency_responses WHERE emergency_id = ? AND status = 'accepted'").all(emergency.id)
   const acceptedIds = acceptedRows.map((r) => r.responder_id)
@@ -406,37 +441,27 @@ app.patch('/api/emergencies/:id/accept', (request, response) => {
   try { rejectedIds = JSON.parse(emergency.rejected_responder_ids || '[]') } catch { rejectedIds = [] }
   rejectedIds = rejectedIds.filter((id) => id !== responderId)
 
-  const assignedResponderId = emergency.assigned_responder_id || responderId
+  const { primary, acceptedResponders } = selectPrimaryResponder(emergency)
+  const assignedResponderId = primary?.id || null
   database.prepare(`
     UPDATE emergencies
-    SET status = 'accepted',
+    SET status = 'Primary responder selected',
         assigned_responder_id = ?,
+        primary_responder_eta_minutes = ?,
+        primary_eta_method = ?,
         accepted_responder_ids = ?,
         rejected_responder_ids = ?
     WHERE id = ?
-  `).run(assignedResponderId, JSON.stringify(acceptedIds), JSON.stringify(rejectedIds), emergency.id)
+  `).run(assignedResponderId, primary?.eta_minutes || null, primary?.eta_method || null, JSON.stringify(acceptedIds), JSON.stringify(rejectedIds), emergency.id)
 
-  const updatedEmergency = database.prepare(`
-    SELECT e.*, 
-      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
-      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
-    FROM emergencies e 
-    LEFT JOIN users u ON u.id = e.assigned_responder_id 
-    WHERE e.id = ?
-  `).get(emergency.id)
-
-  const acceptedResponders = database.prepare(`
-    SELECT u.id, u.name, u.role, u.qualification, er.created_at AS accepted_at
-    FROM emergency_responses er
-    JOIN users u ON u.id = er.responder_id
-    WHERE er.emergency_id = ? AND er.status = 'accepted'
-    ORDER BY er.created_at ASC
-  `).all(emergency.id)
+  const updatedEmergency = getEmergencyWithPrimary(emergency.id)
 
   return response.json({
-    emergency: { ...updatedEmergency, accepted_responders: acceptedResponders, accepted_count: acceptedResponders.length },
+    emergency: { ...updatedEmergency, accepted_responders: decorateAcceptedResponders(acceptedResponders, assignedResponderId), accepted_count: acceptedResponders.length },
     accepted_responder_ids: acceptedIds,
-    message: 'Emergency accepted successfully. You are now responding to this alert.',
+    message: assignedResponderId === responderId
+      ? 'Emergency accepted. You are the Primary Responder based on the current ETA estimate.'
+      : 'Emergency accepted. You are recorded as a secondary/backup responder.',
   })
 })
 
@@ -460,36 +485,36 @@ app.patch('/api/emergencies/:id/reject', (request, response) => {
   const rejectedRows = database.prepare("SELECT responder_id FROM emergency_responses WHERE emergency_id = ? AND status = 'rejected'").all(emergency.id)
   const rejectedIds = rejectedRows.map((r) => r.responder_id)
 
-  let acceptedIds = []
-  try { acceptedIds = JSON.parse(emergency.accepted_responder_ids || '[]') } catch { acceptedIds = [] }
-  acceptedIds = acceptedIds.filter((id) => id !== responderId)
+  const acceptedIds = database.prepare("SELECT responder_id FROM emergency_responses WHERE emergency_id = ? AND status = 'accepted'").all(emergency.id).map((row) => row.responder_id)
 
   let assignedResponderId = emergency.assigned_responder_id
   let nextStatus = emergency.status
   if (assignedResponderId === responderId) {
-    assignedResponderId = acceptedIds.length > 0 ? acceptedIds[0] : null
-    if (!assignedResponderId && nextStatus === 'accepted') {
+    const { primary } = selectPrimaryResponder({ ...emergency, assigned_responder_id: null })
+    assignedResponderId = primary?.id || null
+    if (assignedResponderId) {
+      nextStatus = 'Primary responder selected'
+    } else if (nextStatus === 'accepted' || nextStatus === 'Primary responder selected') {
       nextStatus = (emergency.search_radius_km || 1.0) >= 2.0 ? 'Expanding search to 2 km' : 'Searching for nearby responders'
     }
   }
+
+  const newPrimary = assignedResponderId
+    ? getAcceptedResponders(emergency.id).find((accepted) => accepted.id === assignedResponderId)
+    : null
 
   database.prepare(`
     UPDATE emergencies
     SET assigned_responder_id = ?,
         status = ?,
+        primary_responder_eta_minutes = ?,
+        primary_eta_method = ?,
         rejected_responder_ids = ?,
         accepted_responder_ids = ?
     WHERE id = ?
-  `).run(assignedResponderId, nextStatus, JSON.stringify(rejectedIds), JSON.stringify(acceptedIds), emergency.id)
+  `).run(assignedResponderId, nextStatus, newPrimary?.eta_minutes || null, newPrimary?.eta_method || null, JSON.stringify(rejectedIds), JSON.stringify(acceptedIds), emergency.id)
 
-  const updatedEmergency = database.prepare(`
-    SELECT e.*, 
-      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
-      CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.role END AS responder_role 
-    FROM emergencies e 
-    LEFT JOIN users u ON u.id = e.assigned_responder_id 
-    WHERE e.id = ?
-  `).get(emergency.id)
+  const updatedEmergency = getEmergencyWithPrimary(emergency.id)
 
   return response.json({
     emergency: updatedEmergency,

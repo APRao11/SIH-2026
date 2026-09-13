@@ -56,6 +56,8 @@ export default function AlertSentScreen({ emergency, onBack }) {
   const steps = guidance[current.emergency_type] || guidance.Other
   const matchedCount = current.matched_responder_count || 0
   const searchRadius = Number(current.search_radius_km || 1.0)
+  const primarySelected = Boolean(current.assigned_responder_id)
+  const acceptedCount = current.accepted_count || 0
 
   return (
     <section className="mx-auto max-w-5xl">
@@ -89,23 +91,20 @@ export default function AlertSentScreen({ emergency, onBack }) {
                 <strong>{current.latitude.toFixed(6)}, {current.longitude.toFixed(6)}</strong>
               </div>
             </div>
-            {current.assigned_responder_id || (current.accepted_count && current.accepted_count > 0) ? (
+            {primarySelected || acceptedCount > 0 ? (
               <div className="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">
                 <div className="flex items-center justify-between">
                   <strong className="text-emerald-950 font-bold">
-                    {current.accepted_count > 1
-                      ? `${current.accepted_count} Community Responders Accepted`
-                      : 'Verified Responder Accepted'}
+                    {primarySelected ? 'Primary Responder Selected' : 'Responder(s) Accepted'}
                   </strong>
-                  <span className="badge verified">Help on the way</span>
+                  <span className="badge verified">{primarySelected ? 'Primary assigned' : 'Help on the way'}</span>
                 </div>
                 <p className="mt-1 text-emerald-800">
-                  {current.accepted_count > 1
-                    ? `${current.accepted_count} nearby medical/trained volunteers have accepted this alert and are heading to your location.`
-                    : current.responder_name
-                    ? `${current.responder_name} (${current.responder_role || 'Verified Responder'}) is responding.`
-                    : 'A verified community responder has accepted your emergency alert and is en route.'}
+                  {primarySelected && current.responder_name
+                    ? `${current.responder_name} (${current.responder_role || 'Verified Responder'}) is the primary responder and is responding.${acceptedCount > 1 ? ` ${acceptedCount - 1} accepted backup responder${acceptedCount > 2 ? 's remain' : ' remains'} available.` : ''}`
+                    : `${acceptedCount} verified responder${acceptedCount !== 1 ? 's have' : ' has'} accepted and coordination is in progress.`}
                 </p>
+                {primarySelected && current.primary_responder_eta_minutes && <p className="mt-2 text-xs text-emerald-800">Primary ETA: ~{current.primary_responder_eta_minutes} min (straight-line distance estimate; no live traffic routing).</p>}
                 <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700">
                   <Check className="size-4 text-emerald-600" />
                   Radius expansion locked • Responder live coordination active

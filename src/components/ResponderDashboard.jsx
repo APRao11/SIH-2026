@@ -208,7 +208,7 @@ export default function ResponderDashboard({ responder }) {
         if (action === 'accept') {
           setActionMessage({
             type: 'success',
-            text: `Alert #${id} accepted. You are responding. Navigation route is available.`,
+            text: result.message || `Alert #${id} accepted. You are responding. Navigation route is available.`,
           })
           setActiveTab('accepted')
         } else {
@@ -368,6 +368,8 @@ export default function ResponderDashboard({ responder }) {
           {displayedEmergencies.map((emergency) => {
             const isAccepted = emergency.responder_status === 'accepted'
             const isRejected = emergency.responder_status === 'rejected'
+            const isPrimary = emergency.responder_assignment_role === 'primary'
+            const isSecondary = emergency.responder_assignment_role === 'secondary'
             const searchStage = emergency.search_stage || ((emergency.search_radius_km || 1) >= 2.0 ? 'Stage 2 (2.0 km expanded)' : 'Stage 1 (1.0 km initial)')
             const etaDisplay = emergency.eta_minutes ? `~${emergency.eta_minutes} mins` : 'Calculating...'
 
@@ -388,7 +390,7 @@ export default function ResponderDashboard({ responder }) {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="badge alert">{emergency.emergency_type}</span>
                       <span className={`badge ${isAccepted ? 'verified' : isRejected ? 'rejected' : 'pending'}`}>
-                        {isAccepted ? 'Responding (Accepted)' : isRejected ? 'Declined by you' : 'New Incoming Alert'}
+                        {isPrimary ? 'Primary Responder' : isSecondary ? 'Backup Responder' : isAccepted ? 'Responding (Accepted)' : isRejected ? 'Declined by you' : 'New Incoming Alert'}
                       </span>
                     </div>
                     <h2 className="mt-2.5 text-lg font-bold text-slate-950">Emergency Alert #{emergency.id}</h2>
@@ -428,6 +430,8 @@ export default function ResponderDashboard({ responder }) {
                   </div>
                 </div>
 
+                <p className="mt-2 text-xs text-slate-500">ETA is a straight-line distance estimate; live road routing and traffic are not available in this MVP.</p>
+
                 {/* Description */}
                 {emergency.description && (
                   <p className="mt-3 text-sm text-slate-700 bg-white/50 rounded-md p-2.5 border border-slate-100">
@@ -452,9 +456,13 @@ export default function ResponderDashboard({ responder }) {
                 )}
 
                 {/* Multiple Responders info if accepted */}
-                {isAccepted && emergency.accepted_responders && emergency.accepted_responders.length > 1 && (
+                {isAccepted && (
                   <div className="mt-3 rounded-md bg-blue-50 p-2.5 text-xs text-blue-900 border border-blue-200">
-                    <strong>Coordination:</strong> {emergency.accepted_responders.length} responders have accepted this emergency.
+                    <strong>{isPrimary ? 'Primary assignment:' : 'Backup assignment:'}</strong>{' '}
+                    {isPrimary
+                      ? 'You have the lowest current ETA estimate.'
+                      : 'You remain accepted as a secondary responder; continue to be ready to assist.'}
+                    {emergency.accepted_responders?.length > 1 && ` ${emergency.accepted_responders.length} responders have accepted this emergency.`}
                   </div>
                 )}
 

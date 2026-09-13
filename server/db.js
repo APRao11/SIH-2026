@@ -70,10 +70,21 @@ const scenePhotoColumns = [
   ['matched_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
   ['accepted_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
   ['rejected_responder_ids', "TEXT NOT NULL DEFAULT '[]'"],
+  ['primary_responder_eta_minutes', 'INTEGER'],
+  ['primary_eta_method', 'TEXT'],
 ]
 for (const [name, definition] of scenePhotoColumns) {
   if (!emergencyColumns.includes(name)) database.exec(`ALTER TABLE emergencies ADD COLUMN ${name} ${definition}`)
 }
 
-export default database
+const responseColumns = database.prepare('PRAGMA table_info(emergency_responses)').all().map(({ name }) => name)
+const responseEtaColumns = [
+  ['eta_minutes', 'INTEGER'],
+  ['eta_distance_km', 'REAL'],
+  ['eta_method', 'TEXT'],
+]
+for (const [name, definition] of responseEtaColumns) {
+  if (!responseColumns.includes(name)) database.exec(`ALTER TABLE emergency_responses ADD COLUMN ${name} ${definition}`)
+}
 
+export default database
