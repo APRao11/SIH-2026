@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
 data/*.db
 data/*.db-shm
 data/*.db-wal

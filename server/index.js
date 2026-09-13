@@ -2,6 +2,8 @@ import express from 'express'
 import dotenv from 'dotenv'
 import database from './db.js'
 import multer from 'multer'
+import { createServer } from 'node:http'
+import { Server as SocketServer } from 'socket.io'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { randomUUID, scryptSync } from 'node:crypto'
@@ -9,6 +11,10 @@ import { randomUUID, scryptSync } from 'node:crypto'
 dotenv.config()
 
 const app = express()
+const server = createServer(app)
+const io = new SocketServer(server, {
+  cors: { origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', methods: ['GET', 'POST'] },
+})
 const port = Number(process.env.PORT || 3001)
 const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Other'])
 const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Primary responder selected', 'Help on the way', 'accepted', 'rejected'])
@@ -164,6 +170,8 @@ function checkAndExpandEmergencyRadius(emergency) {
       WHERE id = ?
     `).run(EXPANDED_SEARCH_RADIUS_KM, nowIso, updatedMatchedIds.length, JSON.stringify(updatedMatchedIds), newStatus, emergency.id)
 
+    emitEmergencyUpdate(emergency.id, updatedMatchedIds, 'radius-expanded')
+
     return database.prepare(`
       SELECT e.*, 
         CASE WHEN e.assigned_responder_id IS NOT NULL THEN u.name END AS responder_name, 
@@ -187,6 +195,38 @@ const upload = multer({
 })
 
 app.use(express.json({ limit: '20mb' }))
+
+function getMatchedResponderIds(emergency) {
+  try {
+    return JSON.parse(emergency.matched_responder_ids || '[]')
+  } catch {
+    return []
+  }
+}
+
+// Notify only clients that care about this emergency: the bystander screen in
+// room "emergency:<id>" and the rooms of responders matched to this emergency.
+function emitEmergencyUpdate(emergencyId, responderIds, reason) {
+  io.to(`emergency:${emergencyId}`).emit('emergency:update', { emergencyId, reason })
+  for (const responderId of responderIds) {
+    io.to(`responder:${responderId}`).emit('emergency:update', { emergencyId, reason })
+  }
+}
+
+io.on('connection', (socket) => {
+  socket.on('joinEmergency', (emergencyId) => {
+    if (Number.isFinite(Number(emergencyId))) socket.join(`emergency:${Number(emergencyId)}`)
+  })
+  socket.on('leaveEmergency', (emergencyId) => {
+    if (Number.isFinite(Number(emergencyId))) socket.leave(`emergency:${Number(emergencyId)}`)
+  })
+  socket.on('joinResponder', (responderId) => {
+    if (Number.isFinite(Number(responderId))) socket.join(`responder:${Number(responderId)}`)
+  })
+  socket.on('leaveResponder', (responderId) => {
+    if (Number.isFinite(Number(responderId))) socket.leave(`responder:${Number(responderId)}`)
+  })
+})
 
 app.post('/api/responders', upload.single('verificationDocument'), (request, response) => {
   const { name, phone, email, role, qualification, identity_id: identityId, institution, password } = request.body || {}
@@ -289,6 +329,7 @@ app.post('/api/emergencies', (request, response) => {
   ).run(emergencyType, description.trim(), latitude, longitude, nowIso, initialStatus, photo?.filename || null, photo?.path || null, matchedCount, INITIAL_SEARCH_RADIUS_KM, JSON.stringify(matchedIds))
 
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(result.lastInsertRowid)
+  emitEmergencyUpdate(emergency.id, matchedIds, 'created')
   return response.status(201).json({
     emergency,
     matched_responder_count: matchedCount,
@@ -335,6 +376,7 @@ app.patch('/api/emergencies/:id/status', (request, response) => {
   const result = database.prepare('UPDATE emergencies SET status = ? WHERE id = ?').run(status, request.params.id)
   if (!result.changes) return response.status(404).json({ error: 'Emergency not found.' })
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  emitEmergencyUpdate(emergency.id, getMatchedResponderIds(emergency), 'status-changed')
   return response.json({ emergency })
 })
 
@@ -456,6 +498,8 @@ app.patch('/api/emergencies/:id/accept', (request, response) => {
 
   const updatedEmergency = getEmergencyWithPrimary(emergency.id)
 
+  emitEmergencyUpdate(emergency.id, Array.from(new Set([...getMatchedResponderIds(emergency), ...acceptedIds])), 'accepted')
+
   return response.json({
     emergency: { ...updatedEmergency, accepted_responders: decorateAcceptedResponders(acceptedResponders, assignedResponderId), accepted_count: acceptedResponders.length },
     accepted_responder_ids: acceptedIds,
@@ -516,6 +560,8 @@ app.patch('/api/emergencies/:id/reject', (request, response) => {
 
   const updatedEmergency = getEmergencyWithPrimary(emergency.id)
 
+  emitEmergencyUpdate(emergency.id, Array.from(new Set([...getMatchedResponderIds(emergency), ...acceptedIds])), 'rejected')
+
   return response.json({
     emergency: updatedEmergency,
     rejected_responder_ids: rejectedIds,
@@ -531,4 +577,4 @@ app.use((error, _request, response, _next) => {
   return response.status(400).json({ error: error?.message || 'Invalid request.' })
 })
 
-app.listen(port, () => console.log(`Emergency API listening on http://localhost:${port}`))
+server.listen(port, () => console.log(`Emergency API listening on http://localhost:${port}`))

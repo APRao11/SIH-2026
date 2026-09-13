@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, Check, Clock3, Image, MapPin, Navigation, Radio, RefreshCw, ShieldAlert, UserCheck, X } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
+import socket, { joinResponder, leaveResponder } from '../lib/socket'
 
 export default function ResponderDashboard({ responder }) {
   const [respondersList, setRespondersList] = useState([])
@@ -130,6 +131,20 @@ export default function ResponderDashboard({ responder }) {
       )
     }, 15000)
     return () => window.clearInterval(interval)
+  }, [responderId, available])
+
+  useEffect(() => {
+    if (!responderId) return
+    joinResponder(responderId)
+    function onUpdate(payload) {
+      if (!available || payload?.emergencyId == null) return
+      getAndSyncLocation(
+        (lat, lng) => load(lat, lng),
+        () => load()
+      )
+    }
+    socket.on('emergency:update', onUpdate)
+    return () => { socket.off('emergency:update', onUpdate); leaveResponder(responderId) }
   }, [responderId, available])
 
   function handleSelectResponder(e) {

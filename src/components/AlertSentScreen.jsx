@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, MapPin, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
+import socket, { joinEmergency, leaveEmergency } from '../lib/socket'
 
 const guidance = {
   Accident: ['Move to a safe place if possible.', 'Keep the person still and check for breathing.', 'Continue professional emergency assistance immediately.'],
@@ -34,8 +35,13 @@ export default function AlertSentScreen({ emergency, onBack }) {
       } catch { /* Keep the last known emergency state visible. */ }
     }
     refresh()
+    joinEmergency(emergency.id)
+    function onUpdate(payload) {
+      if (payload?.emergencyId === emergency.id) refresh()
+    }
+    socket.on('emergency:update', onUpdate)
     const timer = window.setInterval(refresh, 3000)
-    return () => { active = false; window.clearInterval(timer) }
+    return () => { active = false; window.clearInterval(timer); socket.off('emergency:update', onUpdate); leaveEmergency(emergency.id) }
   }, [emergency.id])
 
   useEffect(() => {
