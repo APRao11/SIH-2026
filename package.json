@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run server\" \"vite\"",
     "server": "node --watch server/index.js",
-    "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
+    "dev:full": "npm run dev",
     "build": "vite build",
     "lint": "oxlint",
     "test:step4": "node server/test-step4.js",

@@ -18,8 +18,13 @@ export default function ResponderRegistration({ onRegistered }) {
     body.append('verificationDocument', document)
     try {
       const response = await fetch('/api/responders', { method: 'POST', body })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error)
+      const payload = await response.text()
+      let result = {}
+      try { result = payload ? JSON.parse(payload) : {} } catch { /* The proxy/server may return an HTML error page. */ }
+      if (!response.ok) {
+        throw new Error(result.error || `Registration service is unavailable (HTTP ${response.status}). Start the app with npm run dev and try again.`)
+      }
+      if (!result.responder) throw new Error('Registration did not return responder details. Please try again.')
       localStorage.setItem('responderId', String(result.responder.id))
       setState('success')
       onRegistered(result.responder)
