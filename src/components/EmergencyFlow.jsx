@@ -10,6 +10,7 @@ const emergencyTypes = [
   { label: 'Unconscious Person', value: 'Unconscious Person', icon: UserRound },
   { label: 'Other', value: 'Other', icon: Waves },
 ]
+const ACTIVE_EMERGENCY_STORAGE_KEY = 'activeEmergencyId'
 
 function requestCurrentLocation(onSuccess, onFailure) {
   const accurateOptions = { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
@@ -25,17 +26,60 @@ function requestCurrentLocation(onSuccess, onFailure) {
   }, accurateOptions)
 }
 export default function EmergencyFlow({ onBack }) {
-  const [step, setStep] = useState('calling')
+  const [step, setStep] = useState(() => (sessionStorage.getItem(ACTIVE_EMERGENCY_STORAGE_KEY) ? 'restoring' : 'calling'))
   const [selectedType, setSelectedType] = useState(null)
   const [capturedImage, setCapturedImage] = useState(null)
   const [sentEmergency, setSentEmergency] = useState(null)
 
-  if (step === 'sent') return <AlertSentScreen emergency={sentEmergency} onBack={onBack} />
-  if (step === 'confirmation') return <AlertConfirmation emergencyType={selectedType} capturedImage={capturedImage} onBack={() => setStep('photo')} onSent={(emergency) => { setSentEmergency(emergency); setStep('sent') }} />
+  useEffect(() => {
+    if (step !== 'restoring') return
+    let active = true
+    ;(async () => {
+      const activeId = Number(sessionStorage.getItem(ACTIVE_EMERGENCY_STORAGE_KEY))
+      if (!Number.isFinite(activeId) || activeId < 1) {
+        sessionStorage.removeItem(ACTIVE_EMERGENCY_STORAGE_KEY)
+        if (active) setStep('calling')
+        return
+      }
+      try {
+        const response = await fetch(`/api/emergencies/${activeId}`)
+        const result = await response.json()
+        if (!active) return
+        if (response.ok && result.emergency) {
+          setSentEmergency(result.emergency)
+          setStep('sent')
+        } else {
+          sessionStorage.removeItem(ACTIVE_EMERGENCY_STORAGE_KEY)
+          setStep('calling')
+        }
+      } catch {
+        if (active) {
+          sessionStorage.removeItem(ACTIVE_EMERGENCY_STORAGE_KEY)
+          setStep('calling')
+        }
+      }
+    })()
+    return () => { active = false }
+  }, [step])
+
+  function handleSent(emergency) {
+    sessionStorage.setItem(ACTIVE_EMERGENCY_STORAGE_KEY, String(emergency.id))
+    setSentEmergency(emergency)
+    setStep('sent')
+  }
+
+  function handleReturnHome() {
+    sessionStorage.removeItem(ACTIVE_EMERGENCY_STORAGE_KEY)
+    onBack()
+  }
+
+  if (step === 'restoring') return <section className="mx-auto max-w-2xl text-center"><div className="call-panel mt-8"><div className="call-icon"><TriangleAlert className="size-7" /></div><p className="eyebrow mt-8">Active emergency</p><h1 className="mt-3 text-4xl font-bold text-slate-950">Restoring your alert…</h1><p className="mx-auto mt-4 max-w-md text-base leading-7 text-slate-600">You have an active emergency. Loading its current status.</p></div></section>
+  if (step === 'sent') return <AlertSentScreen emergency={sentEmergency} onBack={handleReturnHome} />
+  if (step === 'confirmation') return <AlertConfirmation emergencyType={selectedType} capturedImage={capturedImage} onBack={() => setStep('photo')} onSent={handleSent} />
   if (step === 'photo') return <CameraVerification capturedImage={capturedImage} onCapture={setCapturedImage} onBack={() => setStep('types')} onContinue={() => setStep('confirmation')} />
   if (step === 'types') return <TypeSelection selectedType={selectedType} onSelect={setSelectedType} onBack={() => setStep('calling')} onContinue={() => setStep('photo')} />
 
-  return <CallingScreen onBack={onBack} onContinue={() => setStep('types')} />
+  return <CallingScreen onBack={handleReturnHome} onContinue={() => setStep('types')} />
 }
 
 function CallingScreen({ onBack, onContinue }) {
@@ -91,8 +135,8 @@ function CameraVerification({ capturedImage, onCapture, onBack, onContinue }) {
       <div className="camera-panel mt-8">
         {capturedImage ? <img className="camera-preview" src={capturedImage} alt="Captured emergency scene" /> : <video className="camera-preview" ref={videoRef} autoPlay muted playsInline />}
         {cameraState === 'starting' && <div className="camera-message">Requesting camera access...</div>}
-        {cameraState === 'denied' && <div className="camera-message"><Camera className="mx-auto size-7 text-[#df4d38]" /><strong className="mt-3 block text-slate-950">Camera access was not granted.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Allow camera access in your browser settings to take a verification photo. You can still go back and review the emergency type.</span></div>}
-        {cameraState === 'unsupported' && <div className="camera-message"><strong className="block text-slate-950">Camera access is unavailable here.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Open this prototype on localhost or HTTPS with a camera-capable browser.</span></div>}
+        {cameraState === 'denied' && <div className="camera-message"><Camera className="mx-auto size-7 text-[#df4d38]" /><strong className="mt-3 block text-slate-950">Camera access was not granted.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Allow camera access in your browser settings to take a verification photo, or continue without one — the alert can still be sent.</span></div>}
+        {cameraState === 'unsupported' && <div className="camera-message"><strong className="block text-slate-950">Camera access is unavailable here.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Open this prototype on localhost or HTTPS with a camera-capable browser, or continue without a photo.</span></div>}
       </div>
       {cameraState === 'captured' ? (
         <div className="mt-5 flex gap-3">
@@ -102,6 +146,7 @@ function CameraVerification({ capturedImage, onCapture, onBack, onContinue }) {
       ) : (
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button className="alert-button flex-1" type="button" disabled={cameraState !== 'ready'} onClick={capture}><Camera className="size-5" />Take photo</button>
+          {cameraState !== 'starting' && <button className="secondary-button flex-1 justify-center" type="button" onClick={onContinue}>Continue without photo<ArrowRight className="size-4" /></button>}
         </div>
       )}
       {cameraState !== 'captured' && <p className="mt-5 text-center text-sm text-slate-500">Your photo will be shared with verified responders for this alert.</p>}
@@ -133,8 +178,7 @@ function AlertConfirmation({ emergencyType, capturedImage, onBack, onSent }) {
     }
     setSubmitState('loading'); setError('')
     try {
-      const apiEmergencyType = emergencyType === 'Unconscious Person' ? 'Other' : emergencyType
-      const response = await fetch('/api/emergencies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emergency_type: apiEmergencyType, description, latitude: location.latitude, longitude: location.longitude, scene_photo: capturedImage }) })
+      const response = await fetch('/api/emergencies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emergency_type: emergencyType, description, latitude: location.latitude, longitude: location.longitude, scene_photo: capturedImage }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Unable to send alert.')
       onSent(result.emergency)

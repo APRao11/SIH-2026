@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Ambulance, Check, MapPin, Radio, Search } from 'lucide-react'
+import { Ambulance, Ban, Check, MapPin, PhoneCall, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinEmergency, leaveEmergency } from '../lib/socket'
-
-const guidance = {
-  Accident: ['Move to a safe place if possible.', 'Keep the person still and check for breathing.', 'Continue professional emergency assistance immediately.'],
-  'Cardiac emergency': ['Call 108 and follow dispatcher instructions.', 'Begin CPR if trained and the person is not breathing normally.', 'Ask someone to find an AED if nearby.'],
-  Burns: ['Move away from the heat source.', 'Cool the burn with clean running water for 20 minutes.', 'Do not apply ice, creams, or butter.'],
-  Other: ['Check that the area is safe.', 'Keep the person comfortable and monitor breathing.', 'Continue professional emergency assistance immediately.'],
-}
+import { FIRST_AID_SAFETY_MESSAGE, getFirstAidGuidance } from '../lib/firstAidGuidance'
 
 function parseTimestampMs(dateStr) {
   if (!dateStr) return NaN
@@ -81,7 +75,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
     return () => window.clearInterval(interval)
   }, [current.created_at, current.search_radius_km, current.assigned_responder_id])
 
-  const steps = guidance[current.emergency_type] || guidance.Other
+  const { steps, donts } = getFirstAidGuidance(current.emergency_type)
   const matchedCount = current.matched_responder_count || 0
   const searchRadius = Number(current.search_radius_km || 1.0)
   const primarySelected = Boolean(current.assigned_responder_id)
@@ -218,7 +212,18 @@ export default function AlertSentScreen({ emergency, onBack }) {
             <ol className="guidance-list">
               {steps.map((item) => <li key={item}>{item}</li>)}
             </ol>
-            <p className="mt-5 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">First-aid guidance is for immediate assistance only and does not replace professional medical care.</p>
+            {donts.length > 0 && (
+              <div className="guidance-donts">
+                <h3>Do NOT</h3>
+                <ul>
+                  {donts.map((item) => <li key={item}><Ban className="size-4" />{item}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="mt-5 border-t border-slate-200 pt-4">
+              <a className="call-button" href="tel:108"><PhoneCall className="size-4" />Call 108 ambulance</a>
+              <p className="mt-3 text-xs leading-5 text-slate-500">{FIRST_AID_SAFETY_MESSAGE}</p>
+            </div>
           </div>
         </div>
         <div className="space-y-5">
