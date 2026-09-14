@@ -380,6 +380,21 @@ app.patch('/api/emergencies/:id/status', (request, response) => {
   return response.json({ emergency })
 })
 
+app.patch('/api/emergencies/:id/ambulance-status', (request, response) => {
+  const arrived = request.body?.ambulance_arrived
+  if (typeof arrived !== 'boolean') return response.status(400).json({ error: 'Ambulance arrival must be a boolean.' })
+  const existing = database.prepare('SELECT id FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!existing) return response.status(404).json({ error: 'Emergency not found.' })
+
+  const arrivalStatus = arrived ? 'arrived' : 'not_yet'
+  database.prepare('UPDATE emergencies SET ambulance_arrival_status = ? WHERE id = ?').run(arrivalStatus, existing.id)
+
+  const emergency = getEmergencyWithPrimary(existing.id)
+  const acceptedIds = getAcceptedResponders(emergency.id).map((r) => r.id)
+  emitEmergencyUpdate(emergency.id, Array.from(new Set([...getMatchedResponderIds(emergency), ...acceptedIds])), 'ambulance-status-changed')
+  return response.json({ emergency })
+})
+
 app.get('/api/responder/emergencies', (request, response) => {
   const responderId = Number(request.query.responder_id)
   const responder = database.prepare('SELECT id, verified, available, latitude, longitude, location_updated_at FROM users WHERE id = ?').get(responderId)
