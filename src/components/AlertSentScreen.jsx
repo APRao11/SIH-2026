@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, MapPin, Radio, Search } from 'lucide-react'
+import { Ambulance, Check, MapPin, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinEmergency, leaveEmergency } from '../lib/socket'
 
@@ -22,6 +22,8 @@ function parseTimestampMs(dateStr) {
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
   const [secondsRemaining, setSecondsRemaining] = useState(20)
+  const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
+  const [ambulanceError, setAmbulanceError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -43,6 +45,26 @@ export default function AlertSentScreen({ emergency, onBack }) {
     const timer = window.setInterval(refresh, 3000)
     return () => { active = false; window.clearInterval(timer); socket.off('emergency:update', onUpdate); leaveEmergency(emergency.id) }
   }, [emergency.id])
+
+  async function reportAmbulance(arrived) {
+    if (ambulanceSubmitting) return
+    setAmbulanceSubmitting(true)
+    setAmbulanceError('')
+    try {
+      const response = await fetch(`/api/emergencies/${emergency.id}/ambulance-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ambulance_arrived: arrived }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.emergency) throw new Error(result.error || 'Could not update ambulance status.')
+      setCurrent(result.emergency)
+    } catch (requestError) {
+      setAmbulanceError(requestError.message)
+    } finally {
+      setAmbulanceSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     if ((current.search_radius_km || 1.0) >= 2.0 || current.assigned_responder_id) return
@@ -142,6 +164,53 @@ export default function AlertSentScreen({ emergency, onBack }) {
                 </p>
               </div>
             )}
+          </div>
+          <div className="surface">
+            <p className="eyebrow">Ambulance arrival</p>
+            <div className="mt-3 flex items-center gap-3">
+              <Ambulance className="size-5 text-[#df4d38]" />
+              <strong className="text-xl text-slate-950">Has the ambulance arrived?</strong>
+            </div>
+            <div className="mt-4">
+              <div className="flex gap-3">
+                <button
+                  className="table-button verify flex-1 justify-center py-2.5 text-xs font-bold shadow-sm"
+                  type="button"
+                  disabled={ambulanceSubmitting || current.ambulance_arrival_status === 'arrived'}
+                  onClick={() => reportAmbulance(true)}
+                >
+                  {ambulanceSubmitting ? 'Updating...' : 'YES'}
+                </button>
+                <button
+                  className="table-button reject flex-1 justify-center py-2.5 text-xs font-bold"
+                  type="button"
+                  disabled={ambulanceSubmitting || current.ambulance_arrival_status === 'not_yet'}
+                  onClick={() => reportAmbulance(false)}
+                >
+                  {ambulanceSubmitting ? 'Updating...' : 'NO'}
+                </button>
+              </div>
+              {current.ambulance_arrival_status === 'arrived' && (
+                <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <div className="flex items-center gap-2 font-bold">
+                    <Check className="size-4 text-emerald-600" />
+                    Ambulance arrived — confirmation sent to responders.
+                  </div>
+                  <p className="mt-1 text-xs opacity-80">Thank you for confirming. The responding team has been updated.</p>
+                </div>
+              )}
+              {current.ambulance_arrival_status === 'not_yet' && (
+                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <div className="flex items-center gap-2 font-bold">
+                    <Check className="size-4 text-amber-600" />
+                    Ambulance not yet arrived — this alert stays active.
+                  </div>
+                  <p className="mt-1 text-xs opacity-80">The responders can see the ambulance has not arrived yet. Tap YES the moment it arrives.</p>
+                </div>
+              )}
+              <p className="mt-3 text-xs leading-5 text-slate-500">Reporting that the ambulance has not arrived yet keeps this alert active for responders.</p>
+              {ambulanceError && <p className="mt-2 text-xs font-semibold text-red-700">{ambulanceError}</p>}
+            </div>
           </div>
           <div className="surface">
             <p className="eyebrow">First aid now</p>

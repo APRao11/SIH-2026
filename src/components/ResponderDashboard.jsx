@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, Check, Clock3, Image, MapPin, Navigation, Radio, RefreshCw, ShieldAlert, UserCheck, X } from 'lucide-react'
+import { AlertCircle, Ambulance, Check, Clock3, Image, MapPin, Navigation, Radio, RefreshCw, ShieldAlert, UserCheck, X } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinResponder, leaveResponder } from '../lib/socket'
 
@@ -446,6 +446,17 @@ export default function ResponderDashboard({ responder }) {
                 </div>
 
                 <p className="mt-2 text-xs text-slate-500">ETA is a straight-line distance estimate; live road routing and traffic are not available in this MVP.</p>
+
+                {/* Ambulance Arrival Status */}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {emergency.ambulance_arrival_status === 'arrived' ? (
+                    <span className="badge verified" style={{ textTransform: 'none' }}><Ambulance className="mr-1 size-3.5" />Ambulance: Arrived</span>
+                  ) : emergency.ambulance_arrival_status === 'not_yet' ? (
+                    <span className="badge pending" style={{ textTransform: 'none' }}><Ambulance className="mr-1 size-3.5" />Ambulance: Not yet arrived</span>
+                  ) : (
+                    <span className="text-xs text-slate-400">Awaiting ambulance arrival update from the caller</span>
+                  )}
+                </div>
 
                 {/* Description */}
                 {emergency.description && (
