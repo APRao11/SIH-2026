@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "test:step4": "node server/test-step4.js",
     "test:step6": "node server/test-step6.js",
+    "test:step7": "node server/test-step7.js",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -16,7 +16,7 @@ const io = new SocketServer(server, {
   cors: { origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', methods: ['GET', 'POST'] },
 })
 const port = Number(process.env.PORT || 3001)
-const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Other'])
+const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Unconscious Person', 'Other'])
 const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Primary responder selected', 'Help on the way', 'accepted', 'rejected'])
 const responderStatuses = new Set(['accepted', 'rejected'])
 const roles = new Set(['Doctor', 'Medical Student', 'Trained Volunteer'])
