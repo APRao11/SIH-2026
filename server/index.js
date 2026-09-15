@@ -35,6 +35,7 @@ const PRIMARY_ETA_IMPROVEMENT_MINUTES = 1
 const ETA_METHOD = 'straight_line_distance_estimate'
 const UNRESOLVED_RETENTION_MS = 30 * 60 * 1000
 const RESOLVED_RETENTION_MS = 15 * 60 * 1000
+const HANDLED_VISIBILITY_MS = 2 * 60 * 1000
 
 function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
@@ -464,14 +465,19 @@ app.patch('/api/emergencies/:id/ambulance-status', (request, response) => {
 
 app.patch('/api/emergencies/:id/handled', (request, response) => {
   const responderId = Number(request.body?.responder_id)
-  if (!responderId) return response.status(400).json({ error: 'Responder ID is required.' })
+  const isBystander = request.body?.actor === 'bystander'
+  if (!isBystander && !responderId) return response.status(400).json({ error: 'Responder ID is required.' })
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
-  const accepted = database.prepare("SELECT 1 FROM emergency_responses WHERE emergency_id = ? AND responder_id = ? AND status = 'accepted'").get(emergency.id, responderId)
-  if (!accepted) return response.status(403).json({ error: 'Only an accepted responder can mark this emergency handled.' })
+  if (!isBystander) {
+    const accepted = database.prepare("SELECT 1 FROM emergency_responses WHERE emergency_id = ? AND responder_id = ? AND status = 'accepted'").get(emergency.id, responderId)
+    if (!accepted) return response.status(403).json({ error: 'Only an accepted responder can mark this emergency handled.' })
+  }
 
   const resolvedAt = new Date().toISOString()
-  database.prepare("UPDATE emergencies SET status = 'resolved', resolved_at = ? WHERE id = ?").run(resolvedAt, emergency.id)
+  const handledByType = isBystander ? 'Bystander' : emergency.assigned_responder_id === responderId ? 'Primary responder' : 'Secondary responder'
+  const handledByName = isBystander ? null : database.prepare('SELECT name FROM users WHERE id = ?').get(responderId)?.name || null
+  database.prepare("UPDATE emergencies SET status = 'resolved', resolved_at = ?, handled_by_type = ?, handled_by_name = ? WHERE id = ?").run(resolvedAt, handledByType, handledByName, emergency.id)
   const updatedEmergency = getEmergencyWithPrimary(emergency.id)
   const acceptedIds = getAcceptedResponders(emergency.id).map((responder) => responder.id)
   emitEmergencyUpdate(emergency.id, Array.from(new Set([...getMatchedResponderIds(emergency), ...acceptedIds])), 'resolved')
@@ -511,11 +517,15 @@ app.get('/api/responder/emergencies', (request, response) => {
     })
   }
 
-  const allEmergencies = database.prepare("SELECT * FROM emergencies WHERE scene_photo_path IS NOT NULL AND status NOT IN ('Help on the way', 'rejected', 'resolved') ORDER BY created_at DESC").all()
+  const allEmergencies = database.prepare("SELECT * FROM emergencies WHERE scene_photo_path IS NOT NULL AND status NOT IN ('Help on the way', 'rejected') ORDER BY created_at DESC").all()
 
   const emergencies = []
   for (let em of allEmergencies) {
     em = checkAndExpandEmergencyRadius(em)
+    if (em.status === 'resolved') {
+      const resolvedTime = parseTimestampMs(em.resolved_at)
+      if (Number.isNaN(resolvedTime) || Date.now() - resolvedTime >= HANDLED_VISIBILITY_MS) continue
+    }
     const allowedRadius = Number(em.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
     const distance = calculateHaversineDistance(lat, lon, em.latitude, em.longitude)
     const roundedDistance = Math.round(distance * 10) / 10

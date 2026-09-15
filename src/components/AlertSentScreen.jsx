@@ -24,6 +24,9 @@ export default function AlertSentScreen({ emergency, onBack }) {
   const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
   const [ambulanceError, setAmbulanceError] = useState('')
   const [customGuidance, setCustomGuidance] = useState(null)
+  const [handledSubmitting, setHandledSubmitting] = useState(false)
+  const [handledError, setHandledError] = useState('')
+  const [handledNotice, setHandledNotice] = useState('')
 
   useEffect(() => {
     let active = true
@@ -33,8 +36,10 @@ export default function AlertSentScreen({ emergency, onBack }) {
         const result = await response.json()
         if (response.ok && active && result.emergency) {
           setCurrent(result.emergency)
+          return result.emergency
         }
       } catch { /* Keep the last known emergency state visible. */ }
+      return null
     }
     refresh()
     fetch(`/api/emergencies/${emergency.id}/first-aid`)
@@ -42,8 +47,12 @@ export default function AlertSentScreen({ emergency, onBack }) {
       .then((guidance) => { if (guidance?.steps?.length) setCustomGuidance(guidance) })
       .catch(() => { /* Keep the built-in guidance if AI is unavailable. */ })
     joinEmergency(emergency.id)
-    function onUpdate(payload) {
-      if (payload?.emergencyId === emergency.id) refresh()
+    async function onUpdate(payload) {
+      if (payload?.emergencyId !== emergency.id) return
+      const updatedEmergency = await refresh()
+      if (payload.reason === 'resolved' && updatedEmergency?.handled_by_type) {
+        setHandledNotice(`${updatedEmergency.handled_by_type}${updatedEmergency.handled_by_name ? ` (${updatedEmergency.handled_by_name})` : ''} said this emergency was handled.`)
+      }
     }
     socket.on('emergency:update', onUpdate)
     const timer = window.setInterval(refresh, 3000)
@@ -67,6 +76,27 @@ export default function AlertSentScreen({ emergency, onBack }) {
       setAmbulanceError(requestError.message)
     } finally {
       setAmbulanceSubmitting(false)
+    }
+  }
+
+  async function markHandled() {
+    if (handledSubmitting || current.status === 'resolved') return
+    setHandledSubmitting(true)
+    setHandledError('')
+    try {
+      const response = await fetch(`/api/emergencies/${emergency.id}/handled`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responder_id: 0, actor: 'bystander' }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.emergency) throw new Error(result.error || 'Could not mark the situation handled.')
+      setCurrent(result.emergency)
+      setHandledNotice('Bystander said this emergency was handled.')
+    } catch (requestError) {
+      setHandledError(requestError.message)
+    } finally {
+      setHandledSubmitting(false)
     }
   }
 
@@ -98,6 +128,9 @@ export default function AlertSentScreen({ emergency, onBack }) {
   const responderLocation = Number.isFinite(Number(current.responder_latitude)) && Number.isFinite(Number(current.responder_longitude))
     ? { latitude: Number(current.responder_latitude), longitude: Number(current.responder_longitude), name: current.responder_name }
     : null
+  const handledLabel = current.handled_by_type
+    ? `${current.handled_by_type}${current.handled_by_name ? ` (${current.handled_by_name})` : ''}`
+    : 'Someone'
 
   return (
     <section className="mx-auto max-w-5xl">
@@ -109,6 +142,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
           <p className="mt-3 text-base text-slate-600">Stay with the person while the response is coordinated.</p>
         </div>
       </div>
+      {handledNotice && <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm" role="status">{handledNotice}</div>}
       <div className="sent-grid mt-8">
         <div className="space-y-5">
           <div className="surface">
@@ -176,6 +210,18 @@ export default function AlertSentScreen({ emergency, onBack }) {
                 </p>
               </div>
             )}
+          </div>
+          <div className="surface">
+            <p className="eyebrow">Emergency status</p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">Has the situation been handled?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Notify every responder that assistance is no longer required.</p>
+            <button className="secondary-button mt-4" type="button" disabled={handledSubmitting || current.status === 'resolved'} onClick={markHandled}>
+              <Check className="size-4" />
+              {current.status === 'resolved' ? 'Situation Handled' : handledSubmitting ? 'Updating...' : 'Situation Handled'}
+            </button>
+            {current.status === 'resolved' && <p className="mt-3 text-sm font-semibold text-emerald-700">Responders have been notified that this situation is handled.</p>}
+            {current.status === 'resolved' && <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">{handledLabel} said this emergency was handled.</p>}
+            {handledError && <p className="mt-3 text-sm font-semibold text-red-700">{handledError}</p>}
           </div>
           <div className="surface">
             <p className="eyebrow">Ambulance arrival</p>
