@@ -45,7 +45,7 @@ export default function EmergencyFlow({ onBack }) {
         const response = await fetch(`/api/emergencies/${activeId}`)
         const result = await response.json()
         if (!active) return
-        if (response.ok && result.emergency) {
+        if (response.ok && result.emergency?.scene_photo_path) {
           setSentEmergency(result.emergency)
           setStep('sent')
         } else {
@@ -135,8 +135,8 @@ function CameraVerification({ capturedImage, onCapture, onBack, onContinue }) {
       <div className="camera-panel mt-8">
         {capturedImage ? <img className="camera-preview" src={capturedImage} alt="Captured emergency scene" /> : <video className="camera-preview" ref={videoRef} autoPlay muted playsInline />}
         {cameraState === 'starting' && <div className="camera-message">Requesting camera access...</div>}
-        {cameraState === 'denied' && <div className="camera-message"><Camera className="mx-auto size-7 text-[#df4d38]" /><strong className="mt-3 block text-slate-950">Camera access was not granted.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Allow camera access in your browser settings to take a verification photo, or continue without one — the alert can still be sent.</span></div>}
-        {cameraState === 'unsupported' && <div className="camera-message"><strong className="block text-slate-950">Camera access is unavailable here.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Open this prototype on localhost or HTTPS with a camera-capable browser, or continue without a photo.</span></div>}
+        {cameraState === 'denied' && <div className="camera-message"><Camera className="mx-auto size-7 text-[#df4d38]" /><strong className="mt-3 block text-slate-950">Camera access was not granted.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Allow camera access in your browser settings to take the mandatory verification photo.</span></div>}
+        {cameraState === 'unsupported' && <div className="camera-message"><strong className="block text-slate-950">Camera access is unavailable here.</strong><span className="mt-2 block text-sm leading-6 text-slate-600">Open this prototype on localhost or HTTPS with a camera-capable browser.</span></div>}
       </div>
       {cameraState === 'captured' ? (
         <div className="mt-5 flex gap-3">
@@ -146,7 +146,6 @@ function CameraVerification({ capturedImage, onCapture, onBack, onContinue }) {
       ) : (
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button className="alert-button flex-1" type="button" disabled={cameraState !== 'ready'} onClick={capture}><Camera className="size-5" />Take photo</button>
-          {cameraState !== 'starting' && <button className="secondary-button flex-1 justify-center" type="button" onClick={onContinue}>Continue without photo<ArrowRight className="size-4" /></button>}
         </div>
       )}
       {cameraState !== 'captured' && <p className="mt-5 text-center text-sm text-slate-500">Your photo will be shared with verified responders for this alert.</p>}
