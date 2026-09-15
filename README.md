@@ -141,6 +141,4 @@ This repository is intended for demonstration and evaluation, not direct product
 
 The current admin console is a prototype UI without authentication. Responder selection can also be switched in the dashboard to support local demonstrations. ETA values are estimates based on straight-line distance and an assumed average urban speed; they are not live navigation times.
 
-## License
 
-No license has been specified for this project yet.
