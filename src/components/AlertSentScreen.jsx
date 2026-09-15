@@ -106,7 +106,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
       const createdMs = parseTimestampMs(current.created_at)
       if (!Number.isNaN(createdMs)) {
         const elapsedSec = Math.floor((Date.now() - createdMs) / 1000)
-        const rem = Math.max(0, 15 - elapsedSec)
+        const rem = Math.max(0, 20 - elapsedSec)
         setSecondsRemaining(rem)
       }
     }
