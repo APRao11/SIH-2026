@@ -20,7 +20,7 @@ function formatCoordinate(value) {
 
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
-  const [secondsRemaining, setSecondsRemaining] = useState(15)
+  const [secondsRemaining, setSecondsRemaining] = useState(20)
   const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
   const [ambulanceError, setAmbulanceError] = useState('')
   const [customGuidance, setCustomGuidance] = useState(null)
@@ -248,7 +248,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
             </div>
           </div>
           <div className="surface">
-            <p className="eyebrow">AI first-aid guidance</p>
+            <p className="eyebrow">First-aid guidance</p>
             <h2 className="mt-2 text-2xl font-bold text-slate-950">Immediate steps</h2>
             <ol className="guidance-list">
               {steps.map((item) => <li key={item}>{item}</li>)}
