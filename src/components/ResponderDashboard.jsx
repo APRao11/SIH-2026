@@ -241,6 +241,25 @@ export default function ResponderDashboard({ responder }) {
     }
   }
 
+  async function markHandled(id) {
+    setLoadingAction(id)
+    try {
+      const response = await fetch(`/api/emergencies/${id}/handled`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responder_id: responderId }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Failed to resolve the emergency.')
+      setActionMessage({ type: 'success', text: `Alert #${id} marked as handled. Other responders have been notified.` })
+      load()
+    } catch (error) {
+      setActionMessage({ type: 'error', text: error.message })
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
   const incomingEmergencies = emergencies.filter((e) => !e.responder_status || e.responder_status === 'incoming')
   const acceptedEmergencies = emergencies.filter((e) => e.responder_status === 'accepted')
   const rejectedEmergencies = emergencies.filter((e) => e.responder_status === 'rejected')
@@ -505,6 +524,9 @@ export default function ResponderDashboard({ responder }) {
                         <Navigation className="size-4" />
                         Open Live Navigation (Google Maps)
                       </a>
+                      <button className="table-button reject justify-center py-2.5 text-xs font-bold" type="button" onClick={() => markHandled(emergency.id)} disabled={loadingAction === emergency.id}>
+                        {loadingAction === emergency.id ? 'Updating...' : 'Situation Handled'}
+                      </button>
                     </div>
                   ) : isRejected ? (
                     <div className="flex items-center justify-between w-full text-xs text-slate-500">

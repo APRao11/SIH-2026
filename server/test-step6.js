@@ -40,7 +40,7 @@ try {
   const db = new Database(databasePath)
   const now = new Date().toISOString()
   const responderId = Number(db.prepare("INSERT INTO users (name, role, verified, available, latitude, longitude, location_updated_at) VALUES ('Step6 Responder', 'Doctor', 1, 1, 12.9716, 77.6006, ?)").run(now).lastInsertRowid)
-  const emergencyId = Number(db.prepare("INSERT INTO emergencies (emergency_type, latitude, longitude, created_at, status, search_radius_km, matched_responder_ids) VALUES ('Accident', 12.9716, 77.5946, ?, 'Searching for nearby responders', 1, ?)").run(now, JSON.stringify([responderId])).lastInsertRowid)
+  const emergencyId = Number(db.prepare("INSERT INTO emergencies (emergency_type, latitude, longitude, created_at, status, scene_photo_filename, scene_photo_path, search_radius_km, matched_responder_ids) VALUES ('Accident', 12.9716, 77.5946, ?, 'Searching for nearby responders', 'test-scene.jpg', '/test/scene.jpg', 1, ?)").run(now, JSON.stringify([responderId])).lastInsertRowid)
   db.close()
 
   // Initial state: no arrival status, emergency active

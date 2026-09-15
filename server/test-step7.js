@@ -72,9 +72,10 @@ try {
   const responderId = Number(db.prepare("INSERT INTO users (name, role, verified, available, latitude, longitude, location_updated_at) VALUES ('Step7 Responder', 'Doctor', 1, 1, 12.9716, 77.6006, ?)").run(now).lastInsertRowid)
 
   const createdIds = {}
+  const scenePhoto = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////2wBDAf//////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AX//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AX//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8Qf//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8Qf//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8Qf//Z'
   for (const category of categories) {
     const result = await post('/api/emergencies', {
-      emergency_type: category, latitude: 12.9716, longitude: 77.5946,
+      emergency_type: category, latitude: 12.9716, longitude: 77.5946, scene_photo: scenePhoto,
     })
     assert.equal(result.ok, true, `POST accepts ${category}`)
     assert.equal(result.json.emergency.emergency_type, category, `${category} is stored as reported`)

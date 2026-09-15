@@ -4,8 +4,8 @@ import L from 'leaflet'
 
 const markerIcon = new L.Icon({ iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png', shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] })
 
-export default function EmergencyMap({ emergencies = [], location = null }) {
+export default function EmergencyMap({ emergencies = [], location = null, responder = null }) {
   const center = location ? [location.latitude, location.longitude] : emergencies.length ? [emergencies[0].latitude, emergencies[0].longitude] : null
   if (!center) return null
-  return <MapContainer className="map" center={center} zoom={location ? 14 : 13} scrollWheelZoom><TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />{location && <Marker position={center} icon={markerIcon}><Popup><strong>Detected location</strong></Popup></Marker>}{emergencies.map((emergency) => <Marker key={emergency.id} position={[emergency.latitude, emergency.longitude]} icon={markerIcon}><Popup><strong>{emergency.emergency_type}</strong><br />Alert #{emergency.id}</Popup></Marker>)}</MapContainer>
+  return <MapContainer className="map" center={center} zoom={location ? 14 : 13} scrollWheelZoom><TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />{location && <Marker position={center} icon={markerIcon}><Popup><strong>Emergency location</strong></Popup></Marker>}{responder && <Marker position={[responder.latitude, responder.longitude]} icon={markerIcon}><Popup><strong>{responder.name || 'Assigned responder'}</strong><br />Live location</Popup></Marker>}{emergencies.map((emergency) => <Marker key={emergency.id} position={[emergency.latitude, emergency.longitude]} icon={markerIcon}><Popup><strong>{emergency.emergency_type}</strong><br />Alert #{emergency.id}</Popup></Marker>)}</MapContainer>
 }

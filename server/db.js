@@ -73,6 +73,7 @@ const scenePhotoColumns = [
   ['primary_responder_eta_minutes', 'INTEGER'],
   ['primary_eta_method', 'TEXT'],
   ['ambulance_arrival_status', 'TEXT'],
+  ['resolved_at', 'TEXT'],
 ]
 for (const [name, definition] of scenePhotoColumns) {
   if (!emergencyColumns.includes(name)) database.exec(`ALTER TABLE emergencies ADD COLUMN ${name} ${definition}`)
