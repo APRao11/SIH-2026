@@ -335,20 +335,6 @@ For real emergencies, contact the appropriate official emergency service.
 
 
 
-# 👨‍💻 Contributions
-
-<!-- TODO: Replace this with your REAL contributions -->
-
-### My Contributions
-
-* Implemented/modified **[feature]**
-* Worked on **[feature]**
-* Fixed **[issue]**
-* Improved **[component/API]**
-* Contributed to **[testing/documentation/deployment/etc.]**
-
-> Only list contributions you actually made.
-
 ---
 
 # 🗺️ Future Improvements
