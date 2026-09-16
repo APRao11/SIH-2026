@@ -73,4 +73,10 @@ export function getFirstAidGuidance(emergencyType) {
   return firstAidGuidance[emergencyType] || firstAidGuidance.Other
 }
 
+// Only these categories use deterministic guidance. "Other" is intentionally
+// handled by the server-side AI endpoint after the bystander adds context.
+export function hasFixedFirstAidGuidance(emergencyType) {
+  return ['Accident', 'Cardiac emergency', 'Burns', 'Burn', 'Unconscious Person'].includes(emergencyType)
+}
+
 export default firstAidGuidance
