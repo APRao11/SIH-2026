@@ -1,235 +1,417 @@
-# 🚨 AVINYA
+# 🚑 AVINYA-2026
 
-### Community-Assisted Emergency Response Platform
+<p align="center">
+  <strong>Community-Assisted Emergency Response Platform</strong>
+</p>
 
-> **When every second matters, help should be closer than you think.**
+<p align="center">
+  <em>Bridging the gap between an emergency and the arrival of professional medical help.</em>
+</p>
 
-AVINYA is a community-assisted emergency response platform designed to connect people facing emergencies with nearby **verified responders** who can provide immediate assistance while professional emergency services are on the way.
+<p align="center">
+  <a href="#-about-the-project">About</a> •
+  <a href="#-key-features">Features</a> •
+  <a href="#-how-it-works">How It Works</a> •
+  <a href="#-architecture">Architecture</a> •
+  <a href="#-getting-started">Getting Started</a> •
+  <a href="#-future-scope">Future Scope</a>
+</p>
 
-Built as a **Smart India Hackathon 2026 MVP**.
+<p align="center">
 
-**Status:** 🚧 MVP / Hackathon Prototype
+![Status](https://img.shields.io/badge/Status-MVP-success?style=for-the-badge)
 
----
+![Built For](https://img.shields.io/badge/Built%20For-SIH%202026-orange?style=for-the-badge)
 
-## 🎥 Demo
+![Node.js](https://img.shields.io/badge/Node.js-Backend-339933?style=for-the-badge\&logo=node.js\&logoColor=white)
 
-<!-- TODO: Add your demo video/GIF here -->
+![React](https://img.shields.io/badge/React-Frontend-61DAFB?style=for-the-badge\&logo=react\&logoColor=black)
 
-**[▶️ Watch the AVINYA Demo](YOUR_DEMO_VIDEO_LINK)**
+![Express](https://img.shields.io/badge/Express.js-API-000000?style=for-the-badge\&logo=express\&logoColor=white)
 
----
+![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge\&logo=sqlite\&logoColor=white)
 
-## 📸 Screenshots
-
-<!-- TODO: Replace these placeholders with actual screenshots -->
-
-### 🚨 Emergency Alert
-
-![Emergency Alert](./screenshots/emergency-alert.png)
-
-Bystanders can quickly report an emergency and share their location with the response network.
-
-### 🧑‍🚒 Responder Dashboard
-
-![Responder Dashboard](./screenshots/responder-dashboard.png)
-
-Verified responders can view nearby emergencies and choose incidents they are able to assist with.
-
-### 🗺️ Live Emergency Tracking
-
-![Live Map](./screenshots/live-map.png)
-
-Location-based tracking helps responders and bystanders understand the current response status.
-
-### 🩹 First-Aid Guidance
-
-![First Aid](./screenshots/first-aid.png)
-
-Emergency-specific first-aid guidance provides immediate assistance while professional help is being arranged.
+</p>
 
 ---
 
-# 🎯 The Problem
+## 🚨 About the Project
 
-During an emergency, the first few minutes can be critical.
+During a medical emergency, **every minute matters**.
 
-A bystander may report an incident to emergency services, but professional help may take time to arrive. At the same time, **capable people may already be nearby** but have no way to discover or respond to the situation.
+A bystander may not know how to provide first aid, while a qualified person such as a doctor, medical student, or trained volunteer may be nearby but unaware that an emergency is taking place.
 
-AVINYA introduces a **community-response layer** between the emergency and professional services.
+Traditional emergency response mainly focuses on connecting the person to professional services. However, there can still be a critical time gap between the **incident** and the **arrival of professional help**.
 
----
+### 💡 AVINYA-2026 addresses this gap.
 
-# 💡 Our Solution
-
-AVINYA enables a bystander to:
-
-1.  Report an emergency
-2.  Share their current location
-3.  Optionally provide additional information or media
-4.  Find nearby verified responders
-5.  Receive real-time response updates
-6.  Access relevant first-aid guidance
-7.  Continue relying on official emergency services when required
-
-The platform is designed to **complement—not replace—official emergency response systems.**
+AVINYA is a **community-assisted emergency response platform** that connects a person facing an emergency with **nearby verified responders** who can potentially reach the incident location sooner and provide appropriate assistance while professional medical help is on the way.
 
 ---
 
-# ✨ Key Features
+# ✨ Why AVINYA?
 
-### 🚨 One-Tap Emergency Reporting
+### 🚑 Faster Local Assistance
 
-Create an emergency request with the incident type and location.
+Professional emergency services may take time to reach an incident.
 
-### 📍 Location-Based Responder Matching
-
-Find nearby responders using geographic distance calculations.
-
-###  Verified Responders
-
-Only verified responders can participate in the response network.
-
-### ⚡ Real-Time Communication
-
-Socket.IO enables real-time updates between participants.
-
-### 🗺️ Interactive Maps
-
-Leaflet-based maps provide visual location and response tracking.
-
-###  Emergency-Specific First Aid
-
-Provide immediate first-aid guidance based on the reported emergency.
-
-### 🔄 Dynamic Search Radius
-
-The responder search starts within **1 km** and can expand to **2 km** if an emergency remains unanswered.
-
-### 📡 Location Freshness
-
-Responder locations older than **15 minutes** are excluded from active matching.
+AVINYA creates an additional layer of support by identifying **nearby available responders** who can be alerted to the emergency.
 
 ---
 
-# 🧠 Responder Matching
+### 👨‍⚕️ Trusted Responder Network
 
-AVINYA uses a location-based matching mechanism to identify suitable responders.
+Anyone should not be able to respond to a medical emergency through the platform.
+
+Doctors, medical students, and approved volunteers undergo a **registration and verification process** before becoming eligible to receive emergency requests.
+
+---
+
+### 📍 Location-Aware Response
+
+The emergency location is a critical part of the response.
+
+AVINYA uses the incident location to identify responders in the surrounding area and help them reach the emergency site.
+
+---
+
+### 🔔 Real-Time Alerts
+
+Instead of relying on a person to discover an emergency manually, the platform sends emergency requests to suitable nearby responders.
+
+This turns the responder network into an **active, location-aware support system**.
+
+---
+
+### 🧠 Assistance While Waiting
+
+The platform can provide emergency-specific first-aid guidance to the bystander, helping them take appropriate immediate steps while assistance is being arranged.
+
+> AVINYA is designed as an **assistance and coordination platform**, not a replacement for professional medical care.
+
+---
+
+# 🆘 Key Features
+
+| Feature                       | Description                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| 🆘 **One-Tap SOS**            | Initiate an emergency request without requiring bystander registration         |
+| 📋 **Emergency Type**         | Select accident, cardiac emergency, burns, unconsciousness, or other emergency |
+| 📍 **GPS Location**           | Capture the emergency location for responder matching                          |
+| 👨‍⚕️ **Verified Responders** | Only approved responders can receive emergency requests                        |
+| 📸 **Identity Verification**  | Camera-based verification supports responder registration                      |
+| 🔔 **Real-Time Alerts**       | Notify suitable nearby responders about an emergency                           |
+| 🗺️ **Location View**         | Responders can view the emergency location                                     |
+| ⏱️ **Response Matching**      | Consider responder availability, proximity and estimated travel time           |
+| 🔄 **Radius Expansion**       | Expand the search area when no responder accepts                               |
+| 🤖 **First-Aid Assistance**   | Provide basic emergency-specific guidance                                      |
+| 🚑 **Ambulance Assistance**   | Help the bystander contact emergency ambulance services                        |
+| ✅ **Emergency Status**        | Update the status when ambulance assistance arrives                            |
+
+---
+
+# 🔄 How It Works
 
 ```text
-                 🚨 Emergency Created
-                         │
-                         ▼
-              Find Verified Responders
-                         │
-                         ▼
-             Check Location Freshness
-                    (< 15 min)
-                         │
-                         ▼
-                 Search within 1 km
-                         │
-                  ┌──────┴──────┐
-                  │             │
-               Accepted      No Response
-                  │             │
-                  ▼             ▼
-             🚑 Respond      Wait 20 sec
-                                │
-                                ▼
-                         Expand to 2 km
-                                │
-                                ▼
-                       Find Available Help
+                 ┌──────────────────────┐
+                 │       BYSTANDER      │
+                 │                      │
+                 │       🆘 SOS         │
+                 │   Emergency Type     │
+                 │      Location        │
+                 └──────────┬───────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │      RESPONSE ENGINE      │
+              │                           │
+              │  • Validate Request      │
+              │  • Find Nearby Responders │
+              │  • Match Availability     │
+              │  • Send Emergency Alert   │
+              │  • Expand Search Radius   │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+                 ┌──────────────────────┐
+                 │       RESPONDER      │
+                 │                      │
+                 │   🔔 Alert Received  │
+                 │   📍 View Location   │
+                 │   ✅ Accept Request  │
+                 │   🚶 Reach Incident  │
+                 └──────────┬───────────┘
+                            │
+                            ▼
+                 ┌──────────────────────┐
+                 │   PROFESSIONAL HELP  │
+                 │                      │
+                 │     🚑 Ambulance     │
+                 └──────────────────────┘
 ```
 
-The system uses geographic distance calculations to identify nearby responders and estimates straight-line distance/ETA for the MVP.
+---
+
+# 🏗️ Architecture
+
+```text
+                         AVINYA-2026
+                              │
+             ┌────────────────┴────────────────┐
+             │                                 │
+             ▼                                 ▼
+     ┌───────────────┐                 ┌────────────────┐
+     │   BYSTANDER   │                 │    RESPONDER   │
+     │               │                 │                │
+     │  React UI     │                 │   React UI     │
+     │  SOS Flow     │                 │   Dashboard    │
+     └───────┬───────┘                 └───────┬────────┘
+             │                                 │
+             └──────────────┬──────────────────┘
+                            │
+                            ▼
+                  ┌───────────────────┐
+                  │    REST API       │
+                  │                   │
+                  │ Node.js + Express │
+                  └─────────┬─────────┘
+                            │
+             ┌──────────────┼──────────────┐
+             │              │              │
+             ▼              ▼              ▼
+      ┌────────────┐  ┌────────────┐  ┌─────────────┐
+      │ Emergency  │  │ Responder  │  │ Verification│
+      │ Management │  │ Matching   │  │   System    │
+      └─────┬──────┘  └─────┬──────┘  └──────┬──────┘
+            │               │                │
+            └───────────────┼────────────────┘
+                            ▼
+                    ┌───────────────┐
+                    │    SQLite     │
+                    │   Database    │
+                    └───────────────┘
+```
 
 ---
 
-# 🏗️ System Architecture
+# 🧠 Response Engine
+
+The response engine is the core of AVINYA.
+
+When an emergency is created, the system:
 
 ```text
-┌─────────────────────┐
-│      BYSTANDER      │
-│                     │
-│  Report Emergency   │
-│  Share Location     │
-└──────────┬──────────┘
-           │
+Emergency Created
+       │
+       ▼
+Get Emergency Location
+       │
+       ▼
+Find Available Verified Responders
+       │
+       ▼
+Check Proximity / Estimated Travel Time
+       │
+       ▼
+Send Alert
+       │
+       ├──────────────► Responder Accepts
+       │                         │
+       │                         ▼
+       │                  Response Started
+       │
+       └──────────────► No Acceptance
+                                 │
+                                 ▼
+                         Expand Search Radius
+                                 │
+                                 ▼
+                         Alert More Responders
+```
+
+The system is designed so that **availability and estimated travel time** can be considered along with distance when selecting responders.
+
+---
+
+# 👨‍⚕️ Responder Verification
+
+AVINYA separates **responder registration** from normal emergency usage.
+
+### Registration Flow
+
+```text
+┌────────────────────┐
+│ Responder Registers│
+└──────────┬─────────┘
            ▼
-┌─────────────────────────────┐
-│       React Frontend        │
-│                             │
-│  Emergency UI               │
-│  Maps                       │
-│  Responder Dashboard        │
-└─────────────┬───────────────┘
-              │
-       REST API + Socket.IO
-              │
-              ▼
-┌─────────────────────────────┐
-│      Express Backend        │
-│                             │
-│  Emergency Management       │
-│  Responder Matching         │
-│  Verification               │
-│  Real-Time Events           │
-└─────────────┬───────────────┘
-              │
-              ▼
-        ┌─────────────┐
-        │   SQLite    │
-        │  Database   │
-        └─────────────┘
+┌────────────────────┐
+│ Identity /         │
+│ Credential Details │
+└──────────┬─────────┘
+           ▼
+┌────────────────────┐
+│ Verification       │
+│ Process             │
+└──────────┬─────────┘
+           ▼
+┌────────────────────┐
+│ Admin Review       │
+└──────────┬─────────┘
+           ▼
+┌────────────────────┐
+│ Approved Responder │
+└──────────┬─────────┘
+           ▼
+┌────────────────────┐
+│ Eligible for       │
+│ Emergency Alerts   │
+└────────────────────┘
 ```
 
----
-
-# 🛠️ Technology Stack
-
-| Layer                   | Technology              |
-| ----------------------- | ----------------------- |
-| Frontend                | React 19                |
-| Build Tool              | Vite                    |
-| Backend                 | Node.js + Express 5     |
-| Database                | SQLite                  |
-| Database Driver         | better-sqlite3          |
-| Real-Time Communication | Socket.IO               |
-| Maps                    | Leaflet + React Leaflet |
-| Styling                 | Tailwind CSS            |
-| Icons                   | Lucide React            |
+This helps create a responder network based on **verified participation rather than unrestricted access**.
 
 ---
 
-# 📂 Project Structure
+# 📱 Screenshots / Demo
+
+> Replace the placeholders below with screenshots from the running application.
+
+## 🆘 Bystander Emergency Flow
+
+<p align="center">
+  <img src="docs/screenshots/emergency-flow.png" width="800">
+</p>
+
+**Emergency request → Emergency type → Location → Alert sent**
+
+---
+
+## 👨‍⚕️ Responder Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/responder-dashboard.png" width="800">
+</p>
+
+Responders can view incoming emergency requests and relevant incident information.
+
+---
+
+## 📍 Emergency Location
+
+<p align="center">
+  <img src="docs/screenshots/emergency-map.png" width="800">
+</p>
+
+The emergency location helps responders understand where assistance is required.
+
+---
+
+## 📸 Responder Registration & Verification
+
+<p align="center">
+  <img src="docs/screenshots/responder-registration.png" width="800">
+</p>
+
+Responder registration includes identity and credential verification.
+
+---
+
+# 🎬 Demo
+
+### Complete Emergency Flow
+
+```text
+1. Bystander opens AVINYA
+             ↓
+2. Selects emergency type
+             ↓
+3. Emergency location is captured
+             ↓
+4. SOS request is created
+             ↓
+5. Nearby verified responders are identified
+             ↓
+6. Responders receive emergency alerts
+             ↓
+7. A responder accepts the request
+             ↓
+8. Responder views the emergency location
+             ↓
+9. Responder travels to the incident
+             ↓
+10. Ambulance / professional help is contacted
+```
+
+> 🎥 A short demonstration video can be added here for the SIH presentation and repository showcase.
+
+---
+
+# 🛠️ Tech Stack
+
+### Frontend
+
+* ⚛️ **React**
+* ⚡ **Vite**
+* HTML5
+* CSS3
+* JavaScript
+
+### Backend
+
+* 🟢 **Node.js**
+* 🚀 **Express.js**
+
+### Database
+
+* 🗄️ **SQLite**
+* `better-sqlite3`
+
+### Supporting Technologies
+
+* 📍 Geolocation APIs
+* 📸 Browser Camera API
+* 📁 Multer
+* 🔗 REST APIs
+
+---
+
+# 📁 Project Structure
 
 ```text
 AVINYA-2026/
 │
-├── src/
-│   ├── components/
-│   ├── pages/
-│   ├── services/
+├── client/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   └── ...
 │   └── ...
 │
 ├── server/
-│   ├── ...
+│   ├── routes/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── database/
 │   └── ...
 │
-├── public/
+├── data/
+│   └── emergency-response.db
+│
+├── uploads/
+│   └── ...
+│
+├── docs/
+│   └── screenshots/
 │
 ├── package.json
-├── vite.config.js
-└── README.md
+├── README.md
+└── ...
 ```
-
-> The structure above represents the major application areas. Refer to the repository for the complete implementation.
 
 ---
 
-# 🚀 Getting Started
+# ⚙️ Getting Started
 
 ## Prerequisites
 
@@ -239,124 +421,136 @@ Make sure you have installed:
 * npm
 * Git
 
-Check your versions:
+---
+
+## 1️⃣ Clone the Repository
 
 ```bash
-node --version
-npm --version
-git --version
+git clone https://github.com/thushara-bajimar/AVINYA-2026.git
+cd AVINYA-2026
 ```
 
 ---
 
-## 1. Clone the Repository
-
-```bash
-git clone <repo link>
-```
-
----
-
-## 2. Install Dependencies
+## 2️⃣ Install Dependencies
 
 ```bash
 npm install
 ```
 
+If the frontend and backend have separate package files, install dependencies in their respective directories as configured in the project.
+
 ---
 
-## 3. Start the Development Server
+## 3️⃣ Start the Application
 
 ```bash
 npm run dev
 ```
 
-<!-- TODO: Verify whether the project requires a separate backend command -->
-
-If the backend runs separately, start it according to the project's current scripts/configuration.
+The terminal will display the local development URL.
 
 ---
 
-# 🔌 API
+# 🔐 Security & Privacy
 
-The backend exposes endpoints for emergency management, responder operations, and related functionality.
+AVINYA handles emergency and responder-related information carefully.
 
-### Emergency
+The system is designed around:
 
-```text
-POST   /api/emergencies
-GET    /api/emergencies/:id
-PATCH  /api/emergencies/:id/accept
-```
+* ✅ Verified responder access
+* ✅ Controlled responder registration
+* ✅ Restricted emergency information
+* ✅ Camera-based identity verification
+* ✅ Separation of responder and bystander workflows
 
-### Responders
+### Development Storage
 
-```text
-GET    /api/responders
-GET    /api/responders/:id
-PATCH  /api/responders/:id/location
-```
+The current MVP is designed for **local development and demonstration**.
 
-> Refer to the backend implementation for the complete and current API surface.
+Uploaded verification files and development database data are stored in the configured local application environment and should not be treated as production-grade cloud storage.
+
+For production deployment, secure cloud storage, encryption, authentication, access control, auditing, and appropriate data-retention policies would be required.
 
 ---
 
-# 🔐 Security & Production Considerations
+# 🌱 Future Scope
 
-AVINYA is currently an **MVP intended for demonstration and hackathon evaluation**.
+AVINYA can evolve into a larger emergency-response ecosystem.
 
-Before production deployment, the following areas require additional engineering:
+### ☁️ Cloud Deployment
 
-*  Authentication and authorization
-*  Role-based access control
-*  Encryption of sensitive information
-*  Audit logging
-*  Secure file-upload validation
-*  Location privacy controls
-*  Rate limiting and abuse prevention
-*  CAPTCHA / bot protection where appropriate
-*  Stronger responder identity verification
-*  Integration with official emergency services
-*  Push notifications
-*  Road-network routing and traffic-aware ETA
-*  Production monitoring and observability
-*  Privacy, safety, and regulatory review
+Move from local MVP infrastructure to scalable cloud services.
+
+### 🗺️ Road-Based Routing
+
+Use actual road networks instead of relying only on straight-line geographical distance.
+
+### 🚦 Traffic-Aware ETA
+
+Consider real-time traffic conditions when estimating responder arrival time.
+
+### 📱 Mobile Application
+
+Provide dedicated Android and iOS applications for faster emergency access.
+
+### 🔴 Live Location Sharing
+
+Allow responders and relevant emergency participants to share live movement during an active response.
+
+### 🚑 Emergency Service Integration
+
+Future versions could integrate directly with ambulance and emergency service systems.
+
+### 🏥 Healthcare Integration
+
+Potential integration with hospitals and healthcare providers can be explored in future versions.
+
+### 🌐 Multi-Language Support
+
+Support multiple Indian languages to improve accessibility.
+
+### 📶 Low-Connectivity Support
+
+Optimize emergency communication for areas with unreliable network connectivity.
 
 ---
 
-# ⚠️ Important
+# 🎯 Vision
 
-AVINYA is **not a replacement for official emergency services, ambulances, doctors, or emergency dispatch systems.**
+> **"When an emergency happens, help should not depend only on how quickly an ambulance can arrive."**
 
-It is a prototype exploring how verified community responders could provide an additional layer of assistance while professional help is being arranged.
+AVINYA envisions a connected community where **verified people with relevant training can become an additional layer of emergency support**.
 
-For real emergencies, contact the appropriate official emergency service.
+The goal is not to replace ambulances, doctors, or hospitals.
 
-
+The goal is to **bridge the critical gap before professional help arrives.**
 
 ---
 
-# 🗺️ Future Improvements
+# 🏆 Built for Smart India Hackathon 2026
 
-*  Native mobile application
-*  Push notifications
-*  Official emergency-service integration
-*  Traffic-aware route optimization
-*  Stronger identity and responder verification
-*  Emergency analytics dashboard
-*  Multi-language support
-*  Better handling of poor-connectivity environments
-*  Enhanced privacy-preserving location sharing
+**Project:** AVINYA-2026
+**Theme:** Community-Assisted Emergency Response
+**Event:** Smart India Hackathon 2026
 
+---
 
+# 👥 Team AVINYA-2026
 
+Built with ❤️ by our team for **Smart India Hackathon 2026**.
+
+---
+
+## 📜 License
+
+This project is currently developed as an educational and hackathon prototype.
+
+See the repository for licensing information and project contributions.
+
+---
 
 <p align="center">
-
-### 🚨 AVINYA
-
-**Community-powered assistance when every second matters.**
-
-Built for **Smart India Hackathon 2026**
-
+  <strong>🚑 AVINYA-2026</strong><br>
+  <em>Connecting emergencies with nearby verified help.</em>
 </p>
