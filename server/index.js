@@ -401,40 +401,69 @@ app.get('/api/emergencies/:id', (request, response) => {
   })
 })
 
-app.get('/api/emergencies/:id/first-aid', async (request, response) => {
-  const emergency = database.prepare('SELECT emergency_type, description FROM emergencies WHERE id = ?').get(request.params.id)
-  if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+const AI_FIRST_AID_DISCLAIMER = 'AI-assisted guidance is for immediate first-aid support only and is not a substitute for professional medical care.'
 
-  const fallback = {
-    emergency_type: emergency.emergency_type,
+function otherEmergencyFallback() {
+  return {
+    title: 'Immediate guidance',
     steps: [
-      `Call 108 and tell the dispatcher this is a ${emergency.emergency_type}.`,
+      'Call 108 now or ask someone nearby to call for you.',
       'Keep the area safe and stay with the person while help is coming.',
-      'Check whether the person is awake and breathing normally.',
-      'Follow the ambulance dispatcher instructions and do not give food, drink, or medicine.',
+      'Check whether they are awake and breathing normally.',
+      'Do not give food, drink, or medicine; follow the dispatcher’s instructions.',
     ],
-    donts: ['Do not move the person unless the area is dangerous.', 'Do not delay calling 108.'],
+    urgent: true,
+    disclaimer: AI_FIRST_AID_DISCLAIMER,
     source: 'safe-fallback',
   }
+}
 
+function isDescriptionTooVague(description) {
+  return description.trim().split(/\s+/).length < 3 || description.trim().length < 15
+}
+
+app.post('/api/first-aid/ai', async (request, response) => {
+  const { emergencyType, description } = request.body || {}
+  if (emergencyType !== 'other') return response.status(400).json({ error: 'AI guidance is available only for Other emergencies.' })
+  if (typeof description !== 'string' || !description.trim()) return response.status(400).json({ error: 'Briefly describe what is happening.' })
+
+  const fallback = otherEmergencyFallback()
+  if (isDescriptionTooVague(description)) {
+    return response.json({
+      ...fallback,
+      title: 'Immediate guidance — more detail needed',
+      steps: [...fallback.steps.slice(0, 3), 'If it is safe, tell 108 whether the person is awake, breathing normally, and what changed suddenly.'],
+    })
+  }
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!apiKey) return response.json(fallback)
 
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
   try {
-    const prompt = `Give simple immediate first-aid guidance for a bystander handling ${emergency.emergency_type}. ${emergency.description ? `Context: ${emergency.description}` : ''} Return JSON only with this shape: {"steps":["..."],"donts":["..."]}. Use 3 or 4 short safe steps and 1 or 2 things to avoid. Always say to call 108. Do not diagnose, prescribe medicine, or replace emergency services.`
+    const prompt = `You provide immediate first-aid support for a stressed bystander in India. The emergency category is Other. Situation: ${description.trim().slice(0, 1000)}\nReturn JSON only: {"title":"Immediate Guidance","steps":["..."],"urgent":true}. Give 3-4 short, numbered-list-ready, practical steps. Tell them to call 108 whenever urgent symptoms may be present. Do not diagnose or claim certainty, prescribe medication, or suggest invasive/dangerous procedures. If the description is vague, say what key detail to clarify while providing only safe general steps. Never replace professional care.`
     const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(apiKey), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+      signal: controller.signal,
     })
     if (!aiResponse.ok) return response.json(fallback)
     const aiResult = await aiResponse.json()
-    const text = aiResult.candidates?.[0]?.content?.parts?.[0]?.text
-    const guidance = JSON.parse(text)
-    if (!Array.isArray(guidance.steps) || !Array.isArray(guidance.donts) || !guidance.steps.length) return response.json(fallback)
-    return response.json({ ...fallback, steps: guidance.steps.slice(0, 4), donts: guidance.donts.slice(0, 3), source: 'ai' })
+    const guidance = JSON.parse(aiResult.candidates?.[0]?.content?.parts?.[0]?.text || '')
+    const steps = Array.isArray(guidance.steps) ? guidance.steps.filter((step) => typeof step === 'string' && step.trim()).slice(0, 4) : []
+    if (!steps.length) return response.json(fallback)
+    return response.json({
+      title: typeof guidance.title === 'string' && guidance.title.trim() ? guidance.title.trim().slice(0, 80) : fallback.title,
+      steps,
+      urgent: guidance.urgent !== false,
+      disclaimer: AI_FIRST_AID_DISCLAIMER,
+      source: 'ai',
+    })
   } catch {
     return response.json(fallback)
+  } finally {
+    clearTimeout(timeout)
   }
 })
 
