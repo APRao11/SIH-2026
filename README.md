@@ -252,8 +252,7 @@ git --version
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/samyakjain8431-cyber/AVINYA-2026.git
-cd AVINYA-2026
+git clone <repo link>
 ```
 
 ---
