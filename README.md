@@ -91,11 +91,11 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
 
 ---
 
-# 🆘 Key Features
+#  Key Features
 
 | Feature                       | Description                                                                    |
 | ----------------------------- | ------------------------------------------------------------------------------ |
-| 🆘 **One-Tap SOS**            | Initiate an emergency request without requiring bystander registration         |
+| 🆘 **One-Tap Alert**            | Initiate an emergency request without requiring bystander registration         |
 | 📋 **Emergency Type**         | Select accident, cardiac emergency, burns, unconsciousness, or other emergency |
 | 📍 **GPS Location**           | Capture the emergency location for responder matching                          |
 | 👨‍⚕️ **Verified Responders** | Only approved responders can receive emergency requests                        |
@@ -116,7 +116,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
                  ┌──────────────────────┐
                  │       BYSTANDER      │
                  │                      │
-                 │       🆘 SOS         │
+                 │        Alert         │
                  │   Emergency Type     │
                  │      Location        │
                  └──────────┬───────────┘
@@ -125,7 +125,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
               ┌───────────────────────────┐
               │      RESPONSE ENGINE      │
               │                           │
-              │  • Validate Request      │
+              │  • Validate Request       │
               │  • Find Nearby Responders │
               │  • Match Availability     │
               │  • Send Emergency Alert   │
@@ -136,17 +136,17 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
                  ┌──────────────────────┐
                  │       RESPONDER      │
                  │                      │
-                 │   🔔 Alert Received  │
-                 │   📍 View Location   │
-                 │   ✅ Accept Request  │
-                 │   🚶 Reach Incident  │
+                 │      Alert Received  │
+                 │      View Location   │
+                 │      Accept Request  │
+                 │      Reach Incident  │
                  └──────────┬───────────┘
                             │
                             ▼
                  ┌──────────────────────┐
                  │   PROFESSIONAL HELP  │
                  │                      │
-                 │     🚑 Ambulance     │
+                 │        Ambulance     │
                  └──────────────────────┘
 ```
 
@@ -164,7 +164,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
      │   BYSTANDER   │                 │    RESPONDER   │
      │               │                 │                │
      │  React UI     │                 │   React UI     │
-     │  SOS Flow     │                 │   Dashboard    │
+     │  Alert Flow   │                 │   Dashboard    │
      └───────┬───────┘                 └───────┬────────┘
              │                                 │
              └──────────────┬──────────────────┘
@@ -194,7 +194,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
 
 ---
 
-# 🧠 Response Engine
+#  Response Engine
 
 The response engine is the core of AVINYA.
 
@@ -251,7 +251,7 @@ AVINYA separates **responder registration** from normal emergency usage.
            ▼
 ┌────────────────────┐
 │ Verification       │
-│ Process             │
+│ Process            │
 └──────────┬─────────┘
            ▼
 ┌────────────────────┐
@@ -276,7 +276,7 @@ This helps create a responder network based on **verified participation rather t
 
 > Replace the placeholders below with screenshots from the running application.
 
-## 🆘 Bystander Emergency Flow
+##  Bystander Emergency Flow
 
 <p align="center">
   <img src="docs/screenshots/emergency-flow.png" width="800">
@@ -327,7 +327,7 @@ Responder registration includes identity and credential verification.
              ↓
 3. Emergency location is captured
              ↓
-4. SOS request is created
+4. Alert request is created
              ↓
 5. Nearby verified responders are identified
              ↓
@@ -350,28 +350,28 @@ Responder registration includes identity and credential verification.
 
 ### Frontend
 
-* ⚛️ **React**
-* ⚡ **Vite**
+*  **React**
+*  **Vite**
 * HTML5
 * CSS3
 * JavaScript
 
 ### Backend
 
-* 🟢 **Node.js**
-* 🚀 **Express.js**
+*  **Node.js**
+*  **Express.js**
 
 ### Database
 
-* 🗄️ **SQLite**
+*  **SQLite**
 * `better-sqlite3`
 
 ### Supporting Technologies
 
-* 📍 Geolocation APIs
-* 📸 Browser Camera API
-* 📁 Multer
-* 🔗 REST APIs
+*  Geolocation APIs
+*  Browser Camera API
+*  Multer
+*  REST APIs
 
 ---
 
@@ -458,11 +458,11 @@ AVINYA handles emergency and responder-related information carefully.
 
 The system is designed around:
 
-* ✅ Verified responder access
-* ✅ Controlled responder registration
-* ✅ Restricted emergency information
-* ✅ Camera-based identity verification
-* ✅ Separation of responder and bystander workflows
+*  Verified responder access
+*  Controlled responder registration
+*  Restricted emergency information
+*  Camera-based identity verification
+*  Separation of responder and bystander workflows
 
 ### Development Storage
 
