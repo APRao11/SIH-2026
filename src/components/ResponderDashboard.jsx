@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, Check, Clock3, Image, MapPin, Navigation, Radio, RefreshCw, ShieldAlert, UserCheck, X } from 'lucide-react'
+import { AlertCircle, Ambulance, Check, Clock3, Image, MapPin, Navigation, Radio, RefreshCw, ShieldAlert, UserCheck, X } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinResponder, leaveResponder } from '../lib/socket'
 
@@ -78,6 +78,7 @@ export default function ResponderDashboard({ responder }) {
       const result = await response.json()
       if (response.ok) {
         setEmergencies(result.emergencies || [])
+        return result.emergencies || []
         if (result.message && (!result.emergencies || result.emergencies.length === 0)) {
           setLocationWarning(result.message)
         } else {
@@ -89,6 +90,7 @@ export default function ResponderDashboard({ responder }) {
     } catch {
       setActionMessage({ type: 'error', text: 'Failed to connect to emergency service.' })
     }
+    return []
   }
 
   function getAndSyncLocation(onSuccess, onError, targetId) {
@@ -136,12 +138,20 @@ export default function ResponderDashboard({ responder }) {
   useEffect(() => {
     if (!responderId) return
     joinResponder(responderId)
-    function onUpdate(payload) {
+    async function onUpdate(payload) {
       if (!available || payload?.emergencyId == null) return
-      getAndSyncLocation(
-        (lat, lng) => load(lat, lng),
-        () => load()
-      )
+      const updateAlerts = (lat, lng) => load(lat, lng)
+      const updatedEmergencies = await new Promise((resolve) => {
+        getAndSyncLocation(
+          async (lat, lng) => resolve(await updateAlerts(lat, lng)),
+          async () => resolve(await load())
+        )
+      })
+      if (payload.reason === 'resolved') {
+        const handledEmergency = updatedEmergencies.find((emergency) => emergency.id === payload.emergencyId)
+        const handledBy = handledEmergency?.handled_by_type || 'Someone'
+        setActionMessage({ type: 'info', text: `${handledBy} said emergency #${payload.emergencyId} was handled.` })
+      }
     }
     socket.on('emergency:update', onUpdate)
     return () => { socket.off('emergency:update', onUpdate); leaveResponder(responderId) }
@@ -236,6 +246,25 @@ export default function ResponderDashboard({ responder }) {
       }
     } catch {
       setActionMessage({ type: 'error', text: 'Network connection failed.' })
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  async function markHandled(id) {
+    setLoadingAction(id)
+    try {
+      const response = await fetch(`/api/emergencies/${id}/handled`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responder_id: responderId }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Failed to resolve the emergency.')
+      setActionMessage({ type: 'success', text: `Alert #${id} marked as handled. Other responders have been notified.` })
+      load()
+    } catch (error) {
+      setActionMessage({ type: 'error', text: error.message })
     } finally {
       setLoadingAction(null)
     }
@@ -385,13 +414,17 @@ export default function ResponderDashboard({ responder }) {
             const isRejected = emergency.responder_status === 'rejected'
             const isPrimary = emergency.responder_assignment_role === 'primary'
             const isSecondary = emergency.responder_assignment_role === 'secondary'
+            const anotherResponderAccepted = Boolean(emergency.assigned_responder_id) && !isAccepted
+            const isHandled = emergency.status === 'resolved'
             const searchStage = emergency.search_stage || ((emergency.search_radius_km || 1) >= 2.0 ? 'Stage 2 (2.0 km expanded)' : 'Stage 1 (1.0 km initial)')
             const etaDisplay = emergency.eta_minutes ? `~${emergency.eta_minutes} mins` : 'Calculating...'
 
             return (
               <article
                 className={`alert-item transition-all ${
-                  isAccepted
+                  isHandled
+                    ? 'border-amber-300 bg-amber-50/60 shadow-sm ring-1 ring-amber-300'
+                    : isAccepted
                     ? 'border-emerald-300 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-400'
                     : isRejected
                     ? 'opacity-70 bg-slate-50'
@@ -405,7 +438,7 @@ export default function ResponderDashboard({ responder }) {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="badge alert">{emergency.emergency_type}</span>
                       <span className={`badge ${isAccepted ? 'verified' : isRejected ? 'rejected' : 'pending'}`}>
-                        {isPrimary ? 'Primary Responder' : isSecondary ? 'Backup Responder' : isAccepted ? 'Responding (Accepted)' : isRejected ? 'Declined by you' : 'New Incoming Alert'}
+                        {isHandled ? 'Situation handled' : isPrimary ? 'Primary Responder' : isSecondary ? 'Backup Responder' : isAccepted ? 'Responding (Accepted)' : isRejected ? 'Declined by you' : anotherResponderAccepted ? 'Someone already accepted' : 'New Incoming Alert'}
                       </span>
                     </div>
                     <h2 className="mt-2.5 text-lg font-bold text-slate-950">Emergency Alert #{emergency.id}</h2>
@@ -447,6 +480,17 @@ export default function ResponderDashboard({ responder }) {
 
                 <p className="mt-2 text-xs text-slate-500">ETA is a straight-line distance estimate; live road routing and traffic are not available in this MVP.</p>
 
+                {/* Ambulance Arrival Status */}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {emergency.ambulance_arrival_status === 'arrived' ? (
+                    <span className="badge verified" style={{ textTransform: 'none' }}><Ambulance className="mr-1 size-3.5" />Ambulance: Arrived</span>
+                  ) : emergency.ambulance_arrival_status === 'not_yet' ? (
+                    <span className="badge pending" style={{ textTransform: 'none' }}><Ambulance className="mr-1 size-3.5" />Ambulance: Not yet arrived</span>
+                  ) : (
+                    <span className="text-xs text-slate-400">Awaiting ambulance arrival update from the caller</span>
+                  )}
+                </div>
+
                 {/* Description */}
                 {emergency.description && (
                   <p className="mt-3 text-sm text-slate-700 bg-white/50 rounded-md p-2.5 border border-slate-100">
@@ -483,7 +527,11 @@ export default function ResponderDashboard({ responder }) {
 
                 {/* Action Buttons */}
                 <div className="mt-5 flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
-                  {isAccepted ? (
+                  {isHandled ? (
+                    <div className="w-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+                      {emergency.handled_by_type || 'Someone'}{emergency.handled_by_name ? ` (${emergency.handled_by_name})` : ''} said this emergency was handled. It will leave this page shortly.
+                    </div>
+                  ) : isAccepted ? (
                     <div className="flex w-full items-center justify-between gap-3">
                       <a
                         className="table-button verify flex-1 justify-center py-2.5 text-xs font-bold shadow-sm"
@@ -494,6 +542,9 @@ export default function ResponderDashboard({ responder }) {
                         <Navigation className="size-4" />
                         Open Live Navigation (Google Maps)
                       </a>
+                      <button className="table-button reject justify-center py-2.5 text-xs font-bold" type="button" onClick={() => markHandled(emergency.id)} disabled={loadingAction === emergency.id}>
+                        {loadingAction === emergency.id ? 'Updating...' : 'Situation Handled'}
+                      </button>
                     </div>
                   ) : isRejected ? (
                     <div className="flex items-center justify-between w-full text-xs text-slate-500">
@@ -505,7 +556,7 @@ export default function ResponderDashboard({ responder }) {
                         disabled={!available || loadingAction === emergency.id}
                       >
                         <Check className="size-3.5" />
-                        Re-Accept Alert
+                        {anotherResponderAccepted ? 'Accept as Secondary Responder' : 'Re-Accept Alert'}
                       </button>
                     </div>
                   ) : (
@@ -517,7 +568,7 @@ export default function ResponderDashboard({ responder }) {
                         disabled={!available || loadingAction === emergency.id}
                       >
                         <Check className="size-4" />
-                        {loadingAction === emergency.id ? 'Accepting...' : 'Accept Emergency'}
+                        {loadingAction === emergency.id ? 'Accepting...' : anotherResponderAccepted ? 'Accept as Secondary Responder' : 'Accept Emergency'}
                       </button>
                       <button
                         className="table-button reject flex-1 justify-center py-2.5 text-xs font-bold"

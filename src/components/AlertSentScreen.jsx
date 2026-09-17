@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, MapPin, Radio, Search } from 'lucide-react'
+import { Ambulance, Ban, Check, MapPin, PhoneCall, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinEmergency, leaveEmergency } from '../lib/socket'
-
-const guidance = {
-  Accident: ['Move to a safe place if possible.', 'Keep the person still and check for breathing.', 'Continue professional emergency assistance immediately.'],
-  'Cardiac emergency': ['Call 108 and follow dispatcher instructions.', 'Begin CPR if trained and the person is not breathing normally.', 'Ask someone to find an AED if nearby.'],
-  Burns: ['Move away from the heat source.', 'Cool the burn with clean running water for 20 minutes.', 'Do not apply ice, creams, or butter.'],
-  Other: ['Check that the area is safe.', 'Keep the person comfortable and monitor breathing.', 'Continue professional emergency assistance immediately.'],
-}
+import { FIRST_AID_SAFETY_MESSAGE, getFirstAidGuidance, hasFixedFirstAidGuidance } from '../lib/firstAidGuidance'
 
 function parseTimestampMs(dateStr) {
   if (!dateStr) return NaN
@@ -19,9 +13,21 @@ function parseTimestampMs(dateStr) {
   return new Date(dateStr).getTime()
 }
 
+function formatCoordinate(value) {
+  const coordinate = Number(value)
+  return Number.isFinite(coordinate) ? coordinate.toFixed(6) : 'Unavailable'
+}
+
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
   const [secondsRemaining, setSecondsRemaining] = useState(20)
+  const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
+  const [ambulanceError, setAmbulanceError] = useState('')
+  const [customGuidance, setCustomGuidance] = useState(null)
+  const [guidanceState, setGuidanceState] = useState(emergency.emergency_type === 'Other' ? 'loading' : 'idle')
+  const [handledSubmitting, setHandledSubmitting] = useState(false)
+  const [handledError, setHandledError] = useState('')
+  const [handledNotice, setHandledNotice] = useState('')
 
   useEffect(() => {
     let active = true
@@ -31,18 +37,71 @@ export default function AlertSentScreen({ emergency, onBack }) {
         const result = await response.json()
         if (response.ok && active && result.emergency) {
           setCurrent(result.emergency)
+          return result.emergency
         }
       } catch { /* Keep the last known emergency state visible. */ }
+      return null
     }
     refresh()
+    if (emergency.emergency_type === 'Other') {
+      fetch('/api/first-aid/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emergencyType: 'other', description: emergency.description || 'No further details were provided.' }) })
+        .then((response) => response.ok ? response.json() : null)
+        .then((guidance) => { if (active && guidance?.steps?.length) setCustomGuidance(guidance); if (active) setGuidanceState('ready') })
+        .catch(() => { if (active) setGuidanceState('ready') })
+    }
     joinEmergency(emergency.id)
-    function onUpdate(payload) {
-      if (payload?.emergencyId === emergency.id) refresh()
+    async function onUpdate(payload) {
+      if (payload?.emergencyId !== emergency.id) return
+      const updatedEmergency = await refresh()
+      if (payload.reason === 'resolved' && updatedEmergency?.handled_by_type) {
+        setHandledNotice(`${updatedEmergency.handled_by_type}${updatedEmergency.handled_by_name ? ` (${updatedEmergency.handled_by_name})` : ''} said this emergency was handled.`)
+      }
     }
     socket.on('emergency:update', onUpdate)
     const timer = window.setInterval(refresh, 3000)
     return () => { active = false; window.clearInterval(timer); socket.off('emergency:update', onUpdate); leaveEmergency(emergency.id) }
-  }, [emergency.id])
+  }, [emergency.id, emergency.description, emergency.emergency_type])
+
+  async function reportAmbulance() {
+    if (ambulanceSubmitting) return
+    setAmbulanceSubmitting(true)
+    setAmbulanceError('')
+    try {
+      const response = await fetch(`/api/emergencies/${emergency.id}/ambulance-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ambulance_arrived: true }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.emergency) throw new Error(result.error || 'Could not update ambulance status.')
+      setCurrent(result.emergency)
+    } catch (requestError) {
+      setAmbulanceError(requestError.message)
+    } finally {
+      setAmbulanceSubmitting(false)
+    }
+  }
+
+  async function markHandled() {
+    if (handledSubmitting || current.status === 'resolved') return
+    setHandledSubmitting(true)
+    setHandledError('')
+    try {
+      const response = await fetch(`/api/emergencies/${emergency.id}/handled`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responder_id: 0, actor: 'bystander' }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.emergency) throw new Error(result.error || 'Could not mark the situation handled.')
+      setCurrent(result.emergency)
+      setHandledNotice('Bystander said this emergency was handled.')
+    } catch (requestError) {
+      setHandledError(requestError.message)
+    } finally {
+      setHandledSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     if ((current.search_radius_km || 1.0) >= 2.0 || current.assigned_responder_id) return
@@ -59,11 +118,23 @@ export default function AlertSentScreen({ emergency, onBack }) {
     return () => window.clearInterval(interval)
   }, [current.created_at, current.search_radius_km, current.assigned_responder_id])
 
-  const steps = guidance[current.emergency_type] || guidance.Other
+  const fixedGuidance = getFirstAidGuidance(current.emergency_type)
+  const usesFixedGuidance = hasFixedFirstAidGuidance(current.emergency_type)
+  const steps = usesFixedGuidance ? fixedGuidance.steps : customGuidance?.steps || fixedGuidance.steps
+  const donts = usesFixedGuidance ? fixedGuidance.donts : []
   const matchedCount = current.matched_responder_count || 0
   const searchRadius = Number(current.search_radius_km || 1.0)
   const primarySelected = Boolean(current.assigned_responder_id)
   const acceptedCount = current.accepted_count || 0
+  const emergencyLocation = Number.isFinite(Number(current.latitude)) && Number.isFinite(Number(current.longitude))
+    ? { latitude: Number(current.latitude), longitude: Number(current.longitude) }
+    : null
+  const responderLocation = Number.isFinite(Number(current.responder_latitude)) && Number.isFinite(Number(current.responder_longitude))
+    ? { latitude: Number(current.responder_latitude), longitude: Number(current.responder_longitude), name: current.responder_name }
+    : null
+  const handledLabel = current.handled_by_type
+    ? `${current.handled_by_type}${current.handled_by_name ? ` (${current.handled_by_name})` : ''}`
+    : 'Someone'
 
   return (
     <section className="mx-auto max-w-5xl">
@@ -75,6 +146,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
           <p className="mt-3 text-base text-slate-600">Stay with the person while the response is coordinated.</p>
         </div>
       </div>
+      {handledNotice && <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm" role="status">{handledNotice}</div>}
       <div className="sent-grid mt-8">
         <div className="space-y-5">
           <div className="surface">
@@ -94,7 +166,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
               </div>
               <div>
                 <span className="detail-label">Live location</span>
-                <strong>{current.latitude.toFixed(6)}, {current.longitude.toFixed(6)}</strong>
+                <strong>{formatCoordinate(current.latitude)}, {formatCoordinate(current.longitude)}</strong>
               </div>
             </div>
             {primarySelected || acceptedCount > 0 ? (
@@ -144,21 +216,69 @@ export default function AlertSentScreen({ emergency, onBack }) {
             )}
           </div>
           <div className="surface">
-            <p className="eyebrow">First aid now</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">Immediate steps</h2>
-            <ol className="guidance-list">
+            <p className="eyebrow">Emergency status</p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">Has the situation been handled?</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Notify every responder that assistance is no longer required.</p>
+            <button className="secondary-button mt-4" type="button" disabled={handledSubmitting || current.status === 'resolved'} onClick={markHandled}>
+              <Check className="size-4" />
+              {current.status === 'resolved' ? 'Situation Handled' : handledSubmitting ? 'Updating...' : 'Situation Handled'}
+            </button>
+            {current.status === 'resolved' && <p className="mt-3 text-sm font-semibold text-emerald-700">Responders have been notified that this situation is handled.</p>}
+            {current.status === 'resolved' && <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">{handledLabel} said this emergency was handled.</p>}
+            {handledError && <p className="mt-3 text-sm font-semibold text-red-700">{handledError}</p>}
+          </div>
+          <div className="surface">
+            <p className="eyebrow">Ambulance arrival</p>
+            <div className="mt-3 flex items-center gap-3">
+              <Ambulance className="size-5 text-[#df4d38]" />
+              <strong className="text-xl text-slate-950">Has the ambulance arrived?</strong>
+            </div>
+            <div className="mt-4">
+              <button className="table-button verify w-full justify-center py-2.5 text-xs font-bold shadow-sm" type="button" disabled={ambulanceSubmitting || current.ambulance_arrival_status === 'arrived'} onClick={reportAmbulance}>
+                <Ambulance className="size-4" />
+                {ambulanceSubmitting ? 'Updating...' : 'Ambulance Arrived'}
+              </button>
+              {current.ambulance_arrival_status === 'arrived' && (
+                <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <div className="flex items-center gap-2 font-bold">
+                    <Check className="size-4 text-emerald-600" />
+                    Ambulance arrived — confirmation sent to responders.
+                  </div>
+                  <p className="mt-1 text-xs opacity-80">Thank you for confirming. The responding team has been updated.</p>
+                </div>
+              )}
+              <p className="mt-3 text-xs leading-5 text-slate-500">Only confirm this after the ambulance has physically arrived.</p>
+              {ambulanceError && <p className="mt-2 text-xs font-semibold text-red-700">{ambulanceError}</p>}
+            </div>
+          </div>
+          <div className="surface">
+            <p className="eyebrow">First-aid guidance</p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">{customGuidance?.title || 'Immediate steps'}</h2>
+            {!usesFixedGuidance && <p className="mt-2 text-xs font-semibold text-violet-700">AI-assisted guidance</p>}
+            {guidanceState === 'loading' && !usesFixedGuidance ? <p className="mt-4 text-sm text-slate-600" role="status">Generating immediate guidance...</p> : <ol className="guidance-list">
               {steps.map((item) => <li key={item}>{item}</li>)}
-            </ol>
-            <p className="mt-5 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">First-aid guidance is for immediate assistance only and does not replace professional medical care.</p>
+            </ol>}
+            {donts.length > 0 && (
+              <div className="guidance-donts">
+                <h3>Do NOT</h3>
+                <ul>
+                  {donts.map((item) => <li key={item}><Ban className="size-4" />{item}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="mt-5 border-t border-slate-200 pt-4">
+              <a className="call-button" href="tel:108"><PhoneCall className="size-4" />Call 108 ambulance</a>
+              <p className="mt-3 text-xs leading-5 text-slate-500">{usesFixedGuidance ? FIRST_AID_SAFETY_MESSAGE : customGuidance?.disclaimer || 'AI-assisted guidance is for immediate first-aid support only and is not a substitute for professional medical care.'}</p>
+            </div>
           </div>
         </div>
         <div className="space-y-5">
           <div className="map-shell">
-            <EmergencyMap location={{ latitude: current.latitude, longitude: current.longitude }} emergencies={[]} />
+            <EmergencyMap location={emergencyLocation} responder={responderLocation} emergencies={[]} />
           </div>
           <div className="surface flex items-start gap-3 text-sm text-slate-600">
             <MapPin className="mt-0.5 size-4 shrink-0 text-[#df4d38]" />
-            <p>Emergency location is live. A responder location will appear when available.</p>
+            <p>{responderLocation ? `Live responder location: ${formatCoordinate(responderLocation.latitude)}, ${formatCoordinate(responderLocation.longitude)}. ETA ~${current.primary_responder_eta_minutes || 'calculating'} min.` : 'Emergency location is live. A responder location will appear when available.'}</p>
           </div>
           <button className="secondary-button" type="button" onClick={onBack}>Return home</button>
         </div>

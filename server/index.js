@@ -4,7 +4,7 @@ import database from './db.js'
 import multer from 'multer'
 import { createServer } from 'node:http'
 import { Server as SocketServer } from 'socket.io'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { randomUUID, scryptSync } from 'node:crypto'
 
@@ -16,8 +16,8 @@ const io = new SocketServer(server, {
   cors: { origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', methods: ['GET', 'POST'] },
 })
 const port = Number(process.env.PORT || 3001)
-const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Other'])
-const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Primary responder selected', 'Help on the way', 'accepted', 'rejected'])
+const emergencyTypes = new Set(['Accident', 'Cardiac emergency', 'Breathing problem', 'Injury', 'Bleeding', 'Burns', 'Unconscious Person', 'Other'])
+const statuses = new Set(['Alert created', 'Searching for nearby responders', 'Expanding search to 2 km', 'Responder found', 'Primary responder selected', 'Help on the way', 'accepted', 'rejected', 'resolved'])
 const responderStatuses = new Set(['accepted', 'rejected'])
 const roles = new Set(['Doctor', 'Medical Student', 'Trained Volunteer'])
 const uploadDirectory = process.env.UPLOAD_DIR || './data/uploads'
@@ -27,12 +27,15 @@ mkdirSync(scenePhotoDirectory, { recursive: true })
 
 const INITIAL_SEARCH_RADIUS_KM = 1.0
 const EXPANDED_SEARCH_RADIUS_KM = 2.0
-const RADIUS_EXPANSION_TIMEOUT_MS = 20 * 1000 // 20 seconds for responsive prototype verification
+const RADIUS_EXPANSION_TIMEOUT_MS = 20 * 1000
 const LOCATION_STALE_MINUTES = 15
 // No routing/traffic provider is configured for this MVP. Reassign only when the
 // newly accepted responder is at least one estimated minute faster.
 const PRIMARY_ETA_IMPROVEMENT_MINUTES = 1
 const ETA_METHOD = 'straight_line_distance_estimate'
+const UNRESOLVED_RETENTION_MS = 30 * 60 * 1000
+const RESOLVED_RETENTION_MS = 15 * 60 * 1000
+const HANDLED_VISIBILITY_MS = 2 * 60 * 1000
 
 function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
@@ -51,6 +54,26 @@ function parseTimestampMs(dateStr) {
     return new Date(dateStr.replace(' ', 'T') + 'Z').getTime()
   }
   return new Date(dateStr).getTime()
+}
+
+function deleteEmergency(emergencyId) {
+  const emergency = database.prepare('SELECT scene_photo_path FROM emergencies WHERE id = ?').get(emergencyId)
+  if (!emergency) return
+  database.prepare('DELETE FROM emergency_responses WHERE emergency_id = ?').run(emergencyId)
+  database.prepare('DELETE FROM emergencies WHERE id = ?').run(emergencyId)
+  if (emergency.scene_photo_path) {
+    try { unlinkSync(resolve(emergency.scene_photo_path)) } catch { /* The file may already be gone. */ }
+  }
+}
+
+function cleanupExpiredEmergencies() {
+  const now = Date.now()
+  const emergencies = database.prepare('SELECT id, created_at, resolved_at FROM emergencies').all()
+  for (const emergency of emergencies) {
+    const referenceTime = emergency.resolved_at ? parseTimestampMs(emergency.resolved_at) : parseTimestampMs(emergency.created_at)
+    const retention = emergency.resolved_at ? RESOLVED_RETENTION_MS : UNRESOLVED_RETENTION_MS
+    if (!Number.isNaN(referenceTime) && now - referenceTime >= retention) deleteEmergency(emergency.id)
+  }
 }
 
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
@@ -85,7 +108,9 @@ function findEligibleResponders() {
 
 function getEmergencyWithPrimary(emergencyId) {
   return database.prepare(`
-    SELECT e.*, u.name AS responder_name, u.role AS responder_role
+    SELECT e.*, u.name AS responder_name, u.role AS responder_role,
+      u.latitude AS responder_latitude, u.longitude AS responder_longitude,
+      u.location_updated_at AS responder_location_updated_at
     FROM emergencies e
     LEFT JOIN users u ON u.id = e.assigned_responder_id
     WHERE e.id = ?
@@ -130,8 +155,8 @@ function checkAndExpandEmergencyRadius(emergency) {
   } catch {
     acceptedIds = []
   }
-  // Stop expansion if responder assigned, any responder accepted, or emergency is closed/resolved
-  if (emergency.assigned_responder_id || acceptedIds.length > 0 || ['accepted', 'Help on the way', 'rejected'].includes(emergency.status)) {
+  // After expansion, the original matched responders remain eligible to accept.
+  if (emergency.assigned_responder_id || acceptedIds.length > 0 || ['accepted', 'Help on the way', 'rejected', 'resolved'].includes(emergency.status)) {
     return emergency
   }
   const currentRadius = Number(emergency.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
@@ -299,6 +324,7 @@ app.post('/api/emergencies', (request, response) => {
   if (!emergencyTypes.has(emergencyType)) return response.status(400).json({ error: 'A valid emergency type is required.' })
   if (!validCoordinate(latitude, -90, 90) || !validCoordinate(longitude, -180, 180)) return response.status(400).json({ error: 'Valid latitude and longitude are required.' })
   if (typeof description !== 'string' || description.length > 240) return response.status(400).json({ error: 'Description must be 240 characters or fewer.' })
+  if (!scenePhoto) return response.status(400).json({ error: 'A scene photo is required before sending an alert.' })
 
   let photo
   try { photo = saveScenePhoto(scenePhoto) } catch (error) { return response.status(400).json({ error: error.message }) }
@@ -349,7 +375,7 @@ app.get('/api/emergencies/:id/photo', (request, response) => {
 })
 
 app.get('/api/emergencies', (_request, response) => {
-  const emergencies = database.prepare("SELECT * FROM emergencies WHERE status NOT IN ('Help on the way', 'rejected') ORDER BY created_at DESC").all().map(checkAndExpandEmergencyRadius)
+  const emergencies = database.prepare("SELECT * FROM emergencies WHERE scene_photo_path IS NOT NULL AND status NOT IN ('Help on the way', 'rejected', 'resolved') ORDER BY created_at DESC").all().map(checkAndExpandEmergencyRadius)
   return response.json({ emergencies })
 })
 
@@ -360,6 +386,11 @@ app.get('/api/emergencies/:id', (request, response) => {
 
   emergency = getEmergencyWithPrimary(emergency.id)
   const acceptedResponders = getAcceptedResponders(emergency.id)
+  if (emergency.responder_latitude !== null && emergency.responder_longitude !== null) {
+    const distance = calculateHaversineDistance(emergency.responder_latitude, emergency.responder_longitude, emergency.latitude, emergency.longitude)
+    emergency.primary_responder_eta_minutes = calculateEtaMinutes(distance)
+    emergency.primary_eta_method = ETA_METHOD
+  }
 
   return response.json({
     emergency: {
@@ -370,6 +401,72 @@ app.get('/api/emergencies/:id', (request, response) => {
   })
 })
 
+const AI_FIRST_AID_DISCLAIMER = 'AI-assisted guidance is for immediate first-aid support only and is not a substitute for professional medical care.'
+
+function otherEmergencyFallback() {
+  return {
+    title: 'Immediate guidance',
+    steps: [
+      'Call 108 now or ask someone nearby to call for you.',
+      'Keep the area safe and stay with the person while help is coming.',
+      'Check whether they are awake and breathing normally.',
+      'Do not give food, drink, or medicine; follow the dispatcher’s instructions.',
+    ],
+    urgent: true,
+    disclaimer: AI_FIRST_AID_DISCLAIMER,
+    source: 'safe-fallback',
+  }
+}
+
+function isDescriptionTooVague(description) {
+  return description.trim().split(/\s+/).length < 3 || description.trim().length < 15
+}
+
+app.post('/api/first-aid/ai', async (request, response) => {
+  const { emergencyType, description } = request.body || {}
+  if (emergencyType !== 'other') return response.status(400).json({ error: 'AI guidance is available only for Other emergencies.' })
+  if (typeof description !== 'string' || !description.trim()) return response.status(400).json({ error: 'Briefly describe what is happening.' })
+
+  const fallback = otherEmergencyFallback()
+  if (isDescriptionTooVague(description)) {
+    return response.json({
+      ...fallback,
+      title: 'Immediate guidance — more detail needed',
+      steps: [...fallback.steps.slice(0, 3), 'If it is safe, tell 108 whether the person is awake, breathing normally, and what changed suddenly.'],
+    })
+  }
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+  if (!apiKey) return response.json(fallback)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+  try {
+    const prompt = `You provide immediate first-aid support for a stressed bystander in India. The emergency category is Other. Situation: ${description.trim().slice(0, 1000)}\nReturn JSON only: {"title":"Immediate Guidance","steps":["..."],"urgent":true}. Give 3-4 short, numbered-list-ready, practical steps. Tell them to call 108 whenever urgent symptoms may be present. Do not diagnose or claim certainty, prescribe medication, or suggest invasive/dangerous procedures. If the description is vague, say what key detail to clarify while providing only safe general steps. Never replace professional care.`
+    const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(apiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+      signal: controller.signal,
+    })
+    if (!aiResponse.ok) return response.json(fallback)
+    const aiResult = await aiResponse.json()
+    const guidance = JSON.parse(aiResult.candidates?.[0]?.content?.parts?.[0]?.text || '')
+    const steps = Array.isArray(guidance.steps) ? guidance.steps.filter((step) => typeof step === 'string' && step.trim()).slice(0, 4) : []
+    if (!steps.length) return response.json(fallback)
+    return response.json({
+      title: typeof guidance.title === 'string' && guidance.title.trim() ? guidance.title.trim().slice(0, 80) : fallback.title,
+      steps,
+      urgent: guidance.urgent !== false,
+      disclaimer: AI_FIRST_AID_DISCLAIMER,
+      source: 'ai',
+    })
+  } catch {
+    return response.json(fallback)
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
 app.patch('/api/emergencies/:id/status', (request, response) => {
   const { status } = request.body || {}
   if (!statuses.has(status) && !responderStatuses.has(status)) return response.status(400).json({ error: 'A valid status is required.' })
@@ -378,6 +475,42 @@ app.patch('/api/emergencies/:id/status', (request, response) => {
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
   emitEmergencyUpdate(emergency.id, getMatchedResponderIds(emergency), 'status-changed')
   return response.json({ emergency })
+})
+
+app.patch('/api/emergencies/:id/ambulance-status', (request, response) => {
+  const arrived = request.body?.ambulance_arrived
+  if (typeof arrived !== 'boolean') return response.status(400).json({ error: 'Ambulance arrival must be a boolean.' })
+  const existing = database.prepare('SELECT id FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!existing) return response.status(404).json({ error: 'Emergency not found.' })
+
+  const arrivalStatus = arrived ? 'arrived' : 'not_yet'
+  database.prepare('UPDATE emergencies SET ambulance_arrival_status = ? WHERE id = ?').run(arrivalStatus, existing.id)
+
+  const emergency = getEmergencyWithPrimary(existing.id)
+  const acceptedIds = getAcceptedResponders(emergency.id).map((r) => r.id)
+  emitEmergencyUpdate(emergency.id, Array.from(new Set([...getMatchedResponderIds(emergency), ...acceptedIds])), 'ambulance-status-changed')
+  return response.json({ emergency })
+})
+
+app.patch('/api/emergencies/:id/handled', (request, response) => {
+  const responderId = Number(request.body?.responder_id)
+  const isBystander = request.body?.actor === 'bystander'
+  if (!isBystander && !responderId) return response.status(400).json({ error: 'Responder ID is required.' })
+  const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+  if (!isBystander) {
+    const accepted = database.prepare("SELECT 1 FROM emergency_responses WHERE emergency_id = ? AND responder_id = ? AND status = 'accepted'").get(emergency.id, responderId)
+    if (!accepted) return response.status(403).json({ error: 'Only an accepted responder can mark this emergency handled.' })
+  }
+
+  const resolvedAt = new Date().toISOString()
+  const handledByType = isBystander ? 'Bystander' : emergency.assigned_responder_id === responderId ? 'Primary responder' : 'Secondary responder'
+  const handledByName = isBystander ? null : database.prepare('SELECT name FROM users WHERE id = ?').get(responderId)?.name || null
+  database.prepare("UPDATE emergencies SET status = 'resolved', resolved_at = ?, handled_by_type = ?, handled_by_name = ? WHERE id = ?").run(resolvedAt, handledByType, handledByName, emergency.id)
+  const updatedEmergency = getEmergencyWithPrimary(emergency.id)
+  const acceptedIds = getAcceptedResponders(emergency.id).map((responder) => responder.id)
+  emitEmergencyUpdate(emergency.id, Array.from(new Set([...getMatchedResponderIds(emergency), ...acceptedIds])), 'resolved')
+  return response.json({ emergency: updatedEmergency })
 })
 
 app.get('/api/responder/emergencies', (request, response) => {
@@ -413,11 +546,15 @@ app.get('/api/responder/emergencies', (request, response) => {
     })
   }
 
-  const allEmergencies = database.prepare("SELECT * FROM emergencies ORDER BY created_at DESC").all()
+  const allEmergencies = database.prepare("SELECT * FROM emergencies WHERE scene_photo_path IS NOT NULL AND status NOT IN ('Help on the way', 'rejected') ORDER BY created_at DESC").all()
 
   const emergencies = []
   for (let em of allEmergencies) {
     em = checkAndExpandEmergencyRadius(em)
+    if (em.status === 'resolved') {
+      const resolvedTime = parseTimestampMs(em.resolved_at)
+      if (Number.isNaN(resolvedTime) || Date.now() - resolvedTime >= HANDLED_VISIBILITY_MS) continue
+    }
     const allowedRadius = Number(em.search_radius_km || INITIAL_SEARCH_RADIUS_KM)
     const distance = calculateHaversineDistance(lat, lon, em.latitude, em.longitude)
     const roundedDistance = Math.round(distance * 10) / 10
@@ -465,6 +602,7 @@ app.patch('/api/emergencies/:id/accept', (request, response) => {
 
   const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
   if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+  if (emergency.status === 'resolved') return response.status(409).json({ error: 'This emergency has already been resolved.' })
 
   const nowIso = new Date().toISOString()
   const etaDistanceKm = calculateHaversineDistance(responder.latitude, responder.longitude, emergency.latitude, emergency.longitude)
@@ -577,4 +715,6 @@ app.use((error, _request, response, _next) => {
   return response.status(400).json({ error: error?.message || 'Invalid request.' })
 })
 
+cleanupExpiredEmergencies()
+setInterval(cleanupExpiredEmergencies, 60 * 1000)
 server.listen(port, () => console.log(`Emergency API listening on http://localhost:${port}`))

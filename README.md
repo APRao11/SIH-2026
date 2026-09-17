@@ -5,10 +5,6 @@
 </p>
 
 <p align="center">
-  <strong>⏱ Every minute matters.</strong>
-</p>
-
-<p align="center">
   <em>Bridging the gap between an emergency and the arrival of professional medical help.</em>
 </p>
 
@@ -41,15 +37,15 @@
 
 ## 🚨 About the Project
 
-> **⏱️ Every minute matters.** In a medical emergency, the gap between incident and professional help can mean everything.
+During a medical emergency, **every minute matters**.
 
-A bystander may not know how to provide first aid — yet a qualified person nearby (a doctor, medical student, or trained volunteer) may be completely unaware the emergency is happening.
+A bystander may not know how to provide first aid, while a qualified person such as a doctor, medical student, or trained volunteer may be nearby but unaware that an emergency is taking place.
 
-Traditional emergency response focuses on connecting people to professional services. But a **critical time gap** often exists between the **incident** and the **arrival of professional help**.
+Traditional emergency response mainly focuses on connecting the person to professional services. However, there can still be a critical time gap between the **incident** and the **arrival of professional help**.
 
-### 💡 AVINYA-2026 bridges this gap.
+### 💡 AVINYA-2026 addresses this gap.
 
-AVINYA is a **community-assisted emergency response platform**. When someone hits **[🚨 Send Emergency Alert](#)**, the platform instantly notifies **nearby verified responders** — doctors, medical students, and trained volunteers — who can reach the scene sooner and provide appropriate assistance while professional help is on the way.
+AVINYA is a **community-assisted emergency response platform** that connects a person facing an emergency with **nearby verified responders** who can potentially reach the incident location sooner and provide appropriate assistance while professional medical help is on the way.
 
 ---
 
@@ -140,10 +136,10 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
                  ┌──────────────────────┐
                  │       RESPONDER      │
                  │                      │
-                 │    Alert Received  │
-                 │    View Location   │
-                 │    Accept Request  │
-                 │    Reach Incident  │
+                 │   🔔 Alert Received  │
+                 │   📍 View Location   │
+                 │   ✅ Accept Request  │
+                 │   🚶 Reach Incident  │
                  └──────────┬───────────┘
                             │
                             ▼
