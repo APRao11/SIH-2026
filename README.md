@@ -95,7 +95,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
 
 | Feature                       | Description                                                                    |
 | ----------------------------- | ------------------------------------------------------------------------------ |
-| 🆘 **One-Tap SOS**            | Initiate an emergency request without requiring bystander registration         |
+| 🆘 **One-Tap Alert**            | Initiate an emergency request without requiring bystander registration         |
 | 📋 **Emergency Type**         | Select accident, cardiac emergency, burns, unconsciousness, or other emergency |
 | 📍 **GPS Location**           | Capture the emergency location for responder matching                          |
 | 👨‍⚕️ **Verified Responders** | Only approved responders can receive emergency requests                        |
@@ -116,7 +116,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
                  ┌──────────────────────┐
                  │       BYSTANDER      │
                  │                      │
-                 │        SOS           │
+                 │        Alert         │
                  │   Emergency Type     │
                  │      Location        │
                  └──────────┬───────────┘
@@ -164,7 +164,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
      │   BYSTANDER   │                 │    RESPONDER   │
      │               │                 │                │
      │  React UI     │                 │   React UI     │
-     │  SOS Flow     │                 │   Dashboard    │
+     │  Alert Flow   │                 │   Dashboard    │
      └───────┬───────┘                 └───────┬────────┘
              │                                 │
              └──────────────┬──────────────────┘
@@ -327,7 +327,7 @@ Responder registration includes identity and credential verification.
              ↓
 3. Emergency location is captured
              ↓
-4. SOS request is created
+4. Alert request is created
              ↓
 5. Nearby verified responders are identified
              ↓
