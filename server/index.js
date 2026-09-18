@@ -363,6 +363,23 @@ app.post('/api/emergencies', (request, response) => {
   })
 })
 
+// The initial alert for an Other emergency is intentionally created before its
+// required description is collected. This endpoint updates that same alert and
+// does not re-run matching or emit another responder-alert event.
+app.patch('/api/emergencies/:id/description', (request, response) => {
+  const { description } = request.body || {}
+  if (typeof description !== 'string' || description.trim().length < 3 || description.length > 240) {
+    return response.status(400).json({ error: 'Please enter a meaningful description of up to 240 characters.' })
+  }
+
+  const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+  if (emergency.emergency_type !== 'Other') return response.status(400).json({ error: 'A follow-up description is only required for Other emergencies.' })
+
+  database.prepare('UPDATE emergencies SET description = ? WHERE id = ?').run(description.trim(), emergency.id)
+  return response.json({ emergency: getEmergencyWithPrimary(emergency.id) })
+})
+
 app.get('/api/emergencies/:id/photo', (request, response) => {
   const responderId = Number(request.query.responder_id)
   // Allow verified responders (available OR accepted) to view scene photos

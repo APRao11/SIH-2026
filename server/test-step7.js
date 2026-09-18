@@ -84,6 +84,25 @@ try {
     createdIds[category] = result.json.emergency.id
   }
 
+  // Other dispatches immediately with no description, then updates the same
+  // record without re-running the responder match/notification path.
+  const otherId = createdIds.Other
+  const otherBeforeDescription = await get(`/api/emergencies/${otherId}`)
+  assert.equal(otherBeforeDescription.json.emergency.description, '', 'Other is created before its required description is collected')
+  const matchedIdsBeforeDescription = otherBeforeDescription.json.emergency.matched_responder_ids
+  const responseCountBeforeDescription = db.prepare('SELECT COUNT(*) AS count FROM emergency_responses WHERE emergency_id = ?').get(otherId).count
+
+  const blankOtherDescription = await patch(`/api/emergencies/${otherId}/description`, { description: '  ' })
+  assert.equal(blankOtherDescription.status, 400, 'Other follow-up description cannot be empty')
+
+  const savedOtherDescription = await patch(`/api/emergencies/${otherId}/description`, { description: 'Person collapsed near the bus stop.' })
+  assert.equal(savedOtherDescription.ok, true)
+  assert.equal(savedOtherDescription.json.emergency.id, otherId, 'description updates the original Other emergency')
+  assert.equal(savedOtherDescription.json.emergency.description, 'Person collapsed near the bus stop.')
+  assert.equal(savedOtherDescription.json.emergency.matched_responder_ids, matchedIdsBeforeDescription, 'description update does not re-match responders')
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emergencies').get().count, categories.length, 'description update does not create another emergency')
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emergency_responses WHERE emergency_id = ?').get(otherId).count, responseCountBeforeDescription, 'description update does not create duplicate responder responses')
+
   // An unknown type is still rejected.
   const unknown = await post('/api/emergencies', { emergency_type: 'Fake type', latitude: 12.97, longitude: 77.59 })
   assert.equal(unknown.status, 400)
@@ -118,7 +137,7 @@ try {
   }
   db.close()
 
-  console.log('Step 7 verification passed: all 5 categories + Burn alias resolve, every category reports correctly, and accept/ambulance/radius flow still works.')
+  console.log('Step 7 verification passed: all categories report without a description, Other updates its original alert without re-matching, and accept/ambulance/radius flow still works.')
 } finally {
   server.kill()
   await new Promise((resolve) => server.once('exit', resolve))
