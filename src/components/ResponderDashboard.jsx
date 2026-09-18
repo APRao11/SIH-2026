@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertCircle, Ambulance, Check, Clock3, Image, MapPin, Navigation, Radio, RefreshCw, ShieldAlert, UserCheck, X } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinResponder, leaveResponder } from '../lib/socket'
+import { formatEmergencySentTime } from '../lib/emergencyTime'
 
 export default function ResponderDashboard({ responder }) {
   const [respondersList, setRespondersList] = useState([])
@@ -444,6 +445,11 @@ export default function ResponderDashboard({ responder }) {
                     <h2 className="mt-2.5 text-lg font-bold text-slate-950">Emergency Alert #{emergency.id}</h2>
                   </div>
                   <Radio className={`size-5 ${isAccepted ? 'text-emerald-600 animate-pulse' : isRejected ? 'text-slate-400' : 'text-[#df4d38] animate-pulse'}`} />
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-xs">
+                  <span className="detail-label">Emergency Reported</span>
+                  <strong className="mt-1 flex items-center gap-1.5 text-slate-900"><Clock3 className="size-3.5 text-[#df4d38]" />{formatEmergencySentTime(emergency.created_at)}</strong>
                 </div>
 
                 {/* Emergency Location & Meta Details */}
