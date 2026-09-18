@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
-import { existsSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import firstAidGuidance, { FIRST_AID_SAFETY_MESSAGE, getFirstAidGuidance } from '../src/lib/firstAidGuidance.js'
 import { formatEmergencySentTime } from '../src/lib/emergencyTime.js'
 
-const databasePath = './data/test-step7.db'
-if (existsSync(databasePath)) unlinkSync(databasePath)
+function cleanupQuietly(paths) {
+  for (const candidate of paths) {
+    try {
+      if (existsSync(candidate)) unlinkSync(candidate)
+    } catch {
+      // Windows can keep the WAL/DB files locked briefly after close.
+    }
+  }
+}
+
+mkdirSync('./data', { recursive: true })
+const databasePath = `./data/test-step7.${Date.now()}.${process.pid}.db`
 
 const server = spawn(process.execPath, ['server/index.js'], {
   env: { ...process.env, DATABASE_PATH: databasePath, PORT: '3107' },
@@ -148,9 +158,7 @@ try {
 
   console.log('Step 7 verification passed: all categories report without a description, Other updates its original alert without re-matching, and accept/ambulance/radius flow still works.')
 } finally {
-  server.kill()
+  server.kill('SIGKILL')
   await new Promise((resolve) => server.once('exit', resolve))
-  for (const candidate of [databasePath, `${databasePath}-shm`, `${databasePath}-wal`]) {
-    if (existsSync(candidate)) unlinkSync(candidate)
-  }
+  cleanupQuietly([databasePath, `${databasePath}-shm`, `${databasePath}-wal`])
 }

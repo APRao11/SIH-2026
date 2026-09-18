@@ -332,7 +332,6 @@ app.post('/api/emergencies', (request, response) => {
   if (!emergencyTypes.has(emergencyType)) return response.status(400).json({ error: 'A valid emergency type is required.' })
   if (!validCoordinate(latitude, -90, 90) || !validCoordinate(longitude, -180, 180)) return response.status(400).json({ error: 'Valid latitude and longitude are required.' })
   if (typeof description !== 'string' || description.length > 240) return response.status(400).json({ error: 'Description must be 240 characters or fewer.' })
-  if (emergencyType === 'Other' && !description.trim()) return response.status(400).json({ error: 'A description is required for an Other emergency.' })
   if (!scenePhoto) return response.status(400).json({ error: 'A scene photo is required before sending an alert.' })
 
   let photo

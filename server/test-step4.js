@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
-import { existsSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 
-const databasePath = './data/test-step4.db'
-if (existsSync(databasePath)) unlinkSync(databasePath)
+function cleanupQuietly(paths) {
+  for (const candidate of paths) {
+    try {
+      if (existsSync(candidate)) unlinkSync(candidate)
+    } catch {
+      // Windows can keep the WAL/DB files locked briefly after close.
+    }
+  }
+}
+
+mkdirSync('./data', { recursive: true })
+const databasePath = `./data/test-step4.${Date.now()}.${process.pid}.db`
 
 const server = spawn(process.execPath, ['server/index.js'], {
   env: { ...process.env, DATABASE_PATH: databasePath, PORT: '3104' },
@@ -62,7 +72,9 @@ try {
   assert.equal(result.emergency.assigned_responder_id, null)
   assert.equal(result.emergency.status, 'Searching for nearby responders', 'all rejections leave the emergency searching')
 
-  const old = new Date(Date.now() - 21_000).toISOString()
+  // The production search expands after 30 seconds; make this safely older
+  // than that threshold so the regression test does not depend on timing.
+  const old = new Date(Date.now() - 31_000).toISOString()
   const expansionEmergencyId = Number(addEmergency.run(old).lastInsertRowid)
   const expansionResponse = await fetch(`http://127.0.0.1:3104/api/emergencies/${expansionEmergencyId}`)
   const expansion = (await expansionResponse.json()).emergency
@@ -71,6 +83,7 @@ try {
   db.close()
   console.log('Step 4 verification passed: primary selection, reassignment, backup retention, rejection flow, and radius expansion.')
 } finally {
-  server.kill()
+  server.kill('SIGKILL')
   await new Promise((resolve) => server.once('exit', resolve))
+  cleanupQuietly([databasePath, `${databasePath}-shm`, `${databasePath}-wal`])
 }

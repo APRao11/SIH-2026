@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
-import { existsSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 
-const databasePath = './data/test-step6.db'
-if (existsSync(databasePath)) unlinkSync(databasePath)
+function cleanupQuietly(paths) {
+  for (const candidate of paths) {
+    try {
+      if (existsSync(candidate)) unlinkSync(candidate)
+    } catch {
+      // Windows can keep the WAL/DB files locked briefly after close.
+    }
+  }
+}
+
+mkdirSync('./data', { recursive: true })
+const databasePath = `./data/test-step6.${Date.now()}.${process.pid}.db`
 
 const server = spawn(process.execPath, ['server/index.js'], {
   env: { ...process.env, DATABASE_PATH: databasePath, PORT: '3106' },
@@ -86,9 +96,7 @@ try {
 
   console.log('Step 6 verification passed: YES, NO, page refresh persistence, responder visibility, scope isolation, and validation.')
 } finally {
-  server.kill()
+  server.kill('SIGKILL')
   await new Promise((resolve) => server.once('exit', resolve))
-  for (const candidate of [databasePath, `${databasePath}-shm`, `${databasePath}-wal`]) {
-    if (existsSync(candidate)) unlinkSync(candidate)
-  }
+  cleanupQuietly([databasePath, `${databasePath}-shm`, `${databasePath}-wal`])
 }
