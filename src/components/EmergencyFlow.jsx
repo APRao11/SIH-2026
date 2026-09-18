@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Camera, Flame, HeartPulse, MapPin, PhoneCall, TriangleAlert, UserRound, Waves } from 'lucide-react'
+﻿import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Camera, Check, Flame, HeartPulse, MapPin, PhoneCall, Send, TriangleAlert, UserRound, Waves } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import AlertSentScreen from './AlertSentScreen'
+import { formatEmergencySentTime } from '../lib/emergencyTime'
 
 const emergencyTypes = [
   { label: 'Road Accident', value: 'Accident', icon: TriangleAlert },
@@ -56,7 +57,7 @@ export default function EmergencyFlow({ onBack }) {
         if (!active) return
         if (response.ok && result.emergency?.scene_photo_path) {
           setSentEmergency(result.emergency)
-          setStep('sent')
+          setStep(result.emergency.emergency_type === 'Other' && !result.emergency.description?.trim() ? 'describe-other' : 'sent')
         } else {
           sessionStorage.removeItem(ACTIVE_EMERGENCY_STORAGE_KEY)
           setStep('calling')
@@ -74,6 +75,11 @@ export default function EmergencyFlow({ onBack }) {
   function handleSent(emergency) {
     sessionStorage.setItem(ACTIVE_EMERGENCY_STORAGE_KEY, String(emergency.id))
     setSentEmergency(emergency)
+    setStep(emergency.emergency_type === 'Other' && !emergency.description?.trim() ? 'describe-other' : 'sent')
+  }
+
+  function handleOtherDescriptionSaved(emergency) {
+    setSentEmergency(emergency)
     setStep('sent')
   }
 
@@ -84,7 +90,8 @@ export default function EmergencyFlow({ onBack }) {
 
   if (step === 'restoring') return <section className="mx-auto max-w-2xl text-center"><div className="call-panel mt-8"><div className="call-icon"><TriangleAlert className="size-7" /></div><p className="eyebrow mt-8">Active emergency</p><h1 className="mt-3 text-4xl font-bold text-slate-950">Restoring your alert…</h1><p className="mx-auto mt-4 max-w-md text-base leading-7 text-slate-600">You have an active emergency. Loading its current status.</p></div></section>
   if (step === 'sent') return <AlertSentScreen emergency={sentEmergency} onBack={handleReturnHome} />
-  if (step === 'confirmation') return <AlertConfirmation emergencyType={selectedType} capturedImage={capturedImage} initialDescription={otherDescription} onBack={() => setStep(selectedType === 'Other' ? 'other-guidance' : 'photo')} onSent={handleSent} />
+  if (step === 'describe-other') return <OtherDescription emergency={sentEmergency} onSaved={handleOtherDescriptionSaved} />
+  if (step === 'confirmation') return <AlertConfirmation emergencyType={selectedType} capturedImage={capturedImage} onBack={() => setStep('photo')} onSent={handleSent} />
   if (step === 'photo') return <CameraVerification capturedImage={capturedImage} onCapture={setCapturedImage} onBack={() => setStep('types')} onContinue={() => setStep('confirmation')} />
   if (step === 'other-guidance') return <OtherEmergencyAssistant capturedImage={capturedImage} onCapture={setCapturedImage} description={otherDescription} onDescription={setOtherDescription} onBack={() => setStep('types')} onContinue={() => setStep('confirmation')} />
   if (step === 'types') return <TypeSelection selectedType={selectedType} onSelect={setSelectedType} onChooseOther={() => { setSelectedType('Other'); setCapturedImage(null); setOtherDescription(''); setStep('other-guidance') }} onBack={() => setStep('calling')} onContinue={() => setStep('photo')} />
@@ -257,10 +264,6 @@ function AlertConfirmation({ emergencyType, capturedImage, initialDescription, o
       detectLocation()
       return
     }
-    if (emergencyType === 'Other' && !description.trim()) {
-      setError('Briefly describe what is happening so we can provide immediate guidance.')
-      return
-    }
     setSubmitState('loading'); setError('')
     try {
       const response = await fetch('/api/emergencies', {
@@ -284,6 +287,37 @@ function AlertConfirmation({ emergencyType, capturedImage, initialDescription, o
   }
 
   const typeLabel = emergencyTypes.find((type) => type.value === emergencyType)?.label || emergencyType
+  const isOther = emergencyType === 'Other'
+  return <section className="mx-auto max-w-3xl"><button className="back-link" type="button" onClick={onBack}><ArrowLeft className="size-4" />Back to photo verification</button><div className="mt-8"><p className="eyebrow">Step 4 of 4</p><h1 className="mt-3 text-4xl font-bold text-slate-950">Confirm your emergency alert</h1><p className="mt-3 text-lg text-slate-600">Review what will be shared with nearby responders.</p></div><div className="confirmation-grid mt-8"><div className="confirmation-panel"><div className="confirmation-summary mt-0"><span className="type-icon"><TriangleAlert className="size-5" /></span><div><span className="text-xs font-bold uppercase tracking-wider text-slate-500">Emergency type</span><strong className="mt-1 block text-lg text-slate-950">{typeLabel}</strong></div></div>{!isOther && <label className="form-field mt-5" htmlFor="confirmation-description">Short description <span>(optional)</span><textarea id="confirmation-description" className="field-input min-h-28 resize-y" maxLength="240" placeholder="Add anything responders should know..." value={description} onChange={(event) => setDescription(event.target.value)} /></label>}{isOther && <p className="mt-5 text-sm leading-6 text-slate-600">Send the alert now. We will ask for a required description immediately after nearby responders are notified.</p>}<div className="location-summary mt-5"><div className="flex items-center gap-2"><MapPin className="size-4 text-[#df4d38]" /><strong className="text-sm text-slate-950">Detected GPS location</strong></div>{location ? <div className="mt-2 grid grid-cols-2 gap-3 font-mono text-xs text-slate-700"><span>Lat {location.latitude.toFixed(6)}</span><span>Lng {location.longitude.toFixed(6)}</span></div> : <p className="mt-2 text-sm text-red-700">{locationState === 'loading' ? 'Detecting your location...' : locationState === 'denied' ? 'Location permission denied.' : locationState === 'unavailable' ? 'Your device could not determine a location. Turn on Wi-Fi and Windows Location services.' : locationState === 'timeout' ? 'Location detection timed out. Try again near a window or with Wi-Fi enabled.' : locationState === 'insecure' ? 'Location requires localhost or HTTPS; do not open the built HTML file directly.' : locationState === 'unsupported' ? 'This browser does not support location.' : 'Location is unavailable.'}</p>}{locationState !== 'loading' && <button className="mt-3 text-xs font-bold text-slate-600 underline" type="button" onClick={detectLocation}>Try location again</button>}</div></div><div className="confirmation-media"><div className="confirmation-photo">{capturedImage ? <img src={capturedImage} alt="Captured emergency scene" /> : <div className="camera-message"><Camera className="mx-auto size-6" /><span className="mt-2 block">No photo captured</span></div>}</div>{location && <EmergencyMap location={location} emergencies={[]} />}</div></div>{error && <p className="mt-5 text-sm font-medium text-red-700" role="alert">{error}</p>}<button className="alert-button mt-7" type="button" disabled={!location || submitState === 'loading'} onClick={sendAlert}><Send className="size-5" />{submitState === 'loading' ? 'Sending alert...' : 'Send alert'}</button><p className="mt-4 text-center text-xs text-slate-500">Your photo will be shared with verified responders for this alert.</p></section>
+}
+
+function OtherDescription({ emergency, onSaved }) {
+  const [description, setDescription] = useState('')
+  const [submitState, setSubmitState] = useState('idle')
+  const [error, setError] = useState('')
+  const isMeaningful = description.trim().length >= 3
+
+  async function saveDescription() {
+    if (!isMeaningful || submitState === 'loading') return
+    setSubmitState('loading')
+    setError('')
+    try {
+      const response = await fetch(`/api/emergencies/${emergency.id}/description`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.emergency) throw new Error(result.error || 'Unable to save the description.')
+      onSaved(result.emergency)
+    } catch (requestError) {
+      setSubmitState('idle')
+      setError(requestError.message)
+    }
+  }
+
+  return <section className="mx-auto max-w-2xl"><div className="call-panel mt-8"><div className="confirmation-icon mx-auto"><Check className="size-6" /></div><p className="eyebrow mt-6">Emergency Alert Sent Successfully</p><h1 className="mt-3 text-center text-4xl font-bold text-slate-950">Describe the emergency</h1><p className="mx-auto mt-4 max-w-lg text-center text-base leading-7 text-slate-600">Nearby responders have already been notified. Please describe the emergency so responders can understand what is happening.</p><div className="mx-auto mt-5 max-w-lg rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm"><span className="detail-label">Emergency Sent</span><strong className="mt-1 block text-slate-950">{formatEmergencySentTime(emergency.created_at)}</strong></div><label className="form-field mt-7 text-left" htmlFor="other-description">Description <span>(required)</span><textarea id="other-description" className="field-input min-h-32 resize-y" maxLength="240" autoFocus placeholder="Describe what is happening..." value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <p className="mt-4 text-sm font-medium text-red-700" role="alert">{error}</p>}<button className="alert-button mt-6" type="button" disabled={!isMeaningful || submitState === 'loading'} onClick={saveDescription}>{submitState === 'loading' ? 'Saving description...' : 'Continue'}<ArrowRight className="size-5" /></button></div></section>
+}
 
   return (
     <section className="mx-auto max-w-3xl">

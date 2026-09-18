@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import { existsSync, unlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import firstAidGuidance, { FIRST_AID_SAFETY_MESSAGE, getFirstAidGuidance } from '../src/lib/firstAidGuidance.js'
+import { formatEmergencySentTime } from '../src/lib/emergencyTime.js'
 
 const databasePath = './data/test-step7.db'
 if (existsSync(databasePath)) unlinkSync(databasePath)
@@ -64,6 +65,7 @@ try {
   // Safety message mentions temporary help, contacting EMS, and not replacing a doctor/ambulance.
   assert.match(FIRST_AID_SAFETY_MESSAGE, /emergency medical services/)
   assert.match(FIRST_AID_SAFETY_MESSAGE, /does not replace a doctor or an ambulance/)
+  assert.equal(formatEmergencySentTime('2026-09-18T17:12:00.000Z'), '18 September 2026, 10:42 PM', 'both UIs format the stored UTC timestamp in IST')
 
   // --- 2. Server-side: every category can be reported and the flow still works ---
   await waitForServer()
@@ -80,9 +82,35 @@ try {
     assert.equal(result.ok, true, `POST accepts ${category}`)
     assert.equal(result.json.emergency.emergency_type, category, `${category} is stored as reported`)
     assert.equal(result.json.emergency.status, 'Searching for nearby responders')
+    assert.match(result.json.emergency.created_at, /^\d{4}-\d{2}-\d{2}T.*Z$/, `${category} receives a server-generated ISO alert timestamp`)
     assert.ok(result.json.matched_responder_count >= 1, `${category} matched the nearby responder`)
     createdIds[category] = result.json.emergency.id
   }
+
+  // Other dispatches immediately with no description, then updates the same
+  // record without re-running the responder match/notification path.
+  const otherId = createdIds.Other
+  const otherBeforeDescription = await get(`/api/emergencies/${otherId}`)
+  assert.equal(otherBeforeDescription.json.emergency.description, '', 'Other is created before its required description is collected')
+  const originalOtherSentAt = otherBeforeDescription.json.emergency.created_at
+  const matchedIdsBeforeDescription = otherBeforeDescription.json.emergency.matched_responder_ids
+  const responseCountBeforeDescription = db.prepare('SELECT COUNT(*) AS count FROM emergency_responses WHERE emergency_id = ?').get(otherId).count
+
+  const blankOtherDescription = await patch(`/api/emergencies/${otherId}/description`, { description: '  ' })
+  assert.equal(blankOtherDescription.status, 400, 'Other follow-up description cannot be empty')
+
+  const savedOtherDescription = await patch(`/api/emergencies/${otherId}/description`, { description: 'Person collapsed near the bus stop.' })
+  assert.equal(savedOtherDescription.ok, true)
+  assert.equal(savedOtherDescription.json.emergency.id, otherId, 'description updates the original Other emergency')
+  assert.equal(savedOtherDescription.json.emergency.description, 'Person collapsed near the bus stop.')
+  assert.equal(savedOtherDescription.json.emergency.created_at, originalOtherSentAt, 'description update preserves the original alert timestamp')
+  assert.equal(savedOtherDescription.json.emergency.matched_responder_ids, matchedIdsBeforeDescription, 'description update does not re-match responders')
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emergencies').get().count, categories.length, 'description update does not create another emergency')
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emergency_responses WHERE emergency_id = ?').get(otherId).count, responseCountBeforeDescription, 'description update does not create duplicate responder responses')
+
+  const otherStatusUpdate = await patch(`/api/emergencies/${otherId}/status`, { status: 'Responder found' })
+  assert.equal(otherStatusUpdate.ok, true)
+  assert.equal(otherStatusUpdate.json.emergency.created_at, originalOtherSentAt, 'status update preserves the original alert timestamp')
 
   // An unknown type is still rejected.
   const unknown = await post('/api/emergencies', { emergency_type: 'Fake type', latitude: 12.97, longitude: 77.59 })
@@ -118,7 +146,7 @@ try {
   }
   db.close()
 
-  console.log('Step 7 verification passed: all 5 categories + Burn alias resolve, every category reports correctly, and accept/ambulance/radius flow still works.')
+  console.log('Step 7 verification passed: all categories report without a description, Other updates its original alert without re-matching, and accept/ambulance/radius flow still works.')
 } finally {
   server.kill()
   await new Promise((resolve) => server.once('exit', resolve))

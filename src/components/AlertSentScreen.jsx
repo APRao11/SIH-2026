@@ -3,6 +3,7 @@ import { Ambulance, Ban, Check, MapPin, PhoneCall, Radio, Search } from 'lucide-
 import EmergencyMap from './EmergencyMap'
 import socket, { joinEmergency, leaveEmergency } from '../lib/socket'
 import { FIRST_AID_SAFETY_MESSAGE, getFirstAidGuidance, hasFixedFirstAidGuidance } from '../lib/firstAidGuidance'
+import { formatEmergencySentTime } from '../lib/emergencyTime'
 
 function parseTimestampMs(dateStr) {
   if (!dateStr) return NaN
@@ -29,7 +30,7 @@ async function readApiJson(response, fallbackMessage) {
 
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
-  const [secondsRemaining, setSecondsRemaining] = useState(20)
+  const [secondsRemaining, setSecondsRemaining] = useState(30)
   const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
   const [ambulanceError, setAmbulanceError] = useState('')
   const [handledSubmitting, setHandledSubmitting] = useState(false)
@@ -110,7 +111,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
       const createdMs = parseTimestampMs(current.created_at)
       if (!Number.isNaN(createdMs)) {
         const elapsedSec = Math.floor((Date.now() - createdMs) / 1000)
-        const rem = Math.max(0, 20 - elapsedSec)
+        const rem = Math.max(0, 30 - elapsedSec)
         setSecondsRemaining(rem)
       }
     }
@@ -209,6 +210,10 @@ export default function AlertSentScreen({ emergency, onBack }) {
                 <span className="detail-label">Live location</span>
                 <strong>{formatCoordinate(current.latitude)}, {formatCoordinate(current.longitude)}</strong>
               </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <span className="detail-label">Emergency Sent</span>
+              <strong className="mt-1 block text-slate-950">{formatEmergencySentTime(current.created_at)}</strong>
             </div>
             {primarySelected || acceptedCount > 0 ? (
               <div className="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">

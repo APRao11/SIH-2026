@@ -33,7 +33,7 @@ mkdirSync(scenePhotoDirectory, { recursive: true })
 
 const INITIAL_SEARCH_RADIUS_KM = 1.0
 const EXPANDED_SEARCH_RADIUS_KM = 2.0
-const RADIUS_EXPANSION_TIMEOUT_MS = 20 * 1000
+const RADIUS_EXPANSION_TIMEOUT_MS = 30 * 1000
 const LOCATION_STALE_MINUTES = 15
 // No routing/traffic provider is configured for this MVP. Reassign only when the
 // newly accepted responder is at least one estimated minute faster.
@@ -370,6 +370,23 @@ app.post('/api/emergencies', (request, response) => {
     matched_responder_count: matchedCount,
     matched_responders: matchedResponders,
   })
+})
+
+// The initial alert for an Other emergency is intentionally created before its
+// required description is collected. This endpoint updates that same alert and
+// does not re-run matching or emit another responder-alert event.
+app.patch('/api/emergencies/:id/description', (request, response) => {
+  const { description } = request.body || {}
+  if (typeof description !== 'string' || description.trim().length < 3 || description.length > 240) {
+    return response.status(400).json({ error: 'Please enter a meaningful description of up to 240 characters.' })
+  }
+
+  const emergency = database.prepare('SELECT * FROM emergencies WHERE id = ?').get(request.params.id)
+  if (!emergency) return response.status(404).json({ error: 'Emergency not found.' })
+  if (emergency.emergency_type !== 'Other') return response.status(400).json({ error: 'A follow-up description is only required for Other emergencies.' })
+
+  database.prepare('UPDATE emergencies SET description = ? WHERE id = ?').run(description.trim(), emergency.id)
+  return response.json({ emergency: getEmergencyWithPrimary(emergency.id) })
 })
 
 app.get('/api/emergencies/:id/photo', (request, response) => {
