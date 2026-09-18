@@ -327,7 +327,7 @@ Responder registration includes identity and credential verification.
              ↓
 3. Emergency location is captured
              ↓
-4. Alert request is created
+4. Alert request and ambulance call option is created
              ↓
 5. Nearby verified responders are identified
              ↓
@@ -338,8 +338,6 @@ Responder registration includes identity and credential verification.
 8. Responder views the emergency location
              ↓
 9. Responder travels to the incident
-             ↓
-10. Ambulance / professional help is contacted
 ```
 
 > 🎥 A short demonstration video can be added here for the SIH presentation and repository showcase.
@@ -546,11 +544,10 @@ Built with ❤️ by our team for **Smart India Hackathon 2026**.
 
 This project is currently developed as an educational and hackathon prototype.
 
-See the repository for licensing information and project contributions.
-
 ---
 
 <p align="center">
-  <strong>🚑 AVINYA-2026</strong><br>
+  <strong>🚑 AVINYA</strong><br>
+  <strong>Every Minute Matters</strong><br>
   <em>Connecting emergencies with nearby verified help.</em>
 </p>
