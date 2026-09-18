@@ -2,6 +2,7 @@
 import { ArrowLeft, ArrowRight, Camera, Check, Flame, HeartPulse, MapPin, PhoneCall, Send, TriangleAlert, UserRound, Waves } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import AlertSentScreen from './AlertSentScreen'
+import { formatEmergencySentTime } from '../lib/emergencyTime'
 
 const emergencyTypes = [
   { label: 'Road Accident', value: 'Accident', icon: TriangleAlert },
@@ -220,7 +221,7 @@ function OtherDescription({ emergency, onSaved }) {
     }
   }
 
-  return <section className="mx-auto max-w-2xl"><div className="call-panel mt-8"><div className="confirmation-icon mx-auto"><Check className="size-6" /></div><p className="eyebrow mt-6">Emergency Alert Sent Successfully</p><h1 className="mt-3 text-center text-4xl font-bold text-slate-950">Describe the emergency</h1><p className="mx-auto mt-4 max-w-lg text-center text-base leading-7 text-slate-600">Nearby responders have already been notified. Please describe the emergency so responders can understand what is happening.</p><label className="form-field mt-7 text-left" htmlFor="other-description">Description <span>(required)</span><textarea id="other-description" className="field-input min-h-32 resize-y" maxLength="240" autoFocus placeholder="Describe what is happening..." value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <p className="mt-4 text-sm font-medium text-red-700" role="alert">{error}</p>}<button className="alert-button mt-6" type="button" disabled={!isMeaningful || submitState === 'loading'} onClick={saveDescription}>{submitState === 'loading' ? 'Saving description...' : 'Continue'}<ArrowRight className="size-5" /></button></div></section>
+  return <section className="mx-auto max-w-2xl"><div className="call-panel mt-8"><div className="confirmation-icon mx-auto"><Check className="size-6" /></div><p className="eyebrow mt-6">Emergency Alert Sent Successfully</p><h1 className="mt-3 text-center text-4xl font-bold text-slate-950">Describe the emergency</h1><p className="mx-auto mt-4 max-w-lg text-center text-base leading-7 text-slate-600">Nearby responders have already been notified. Please describe the emergency so responders can understand what is happening.</p><div className="mx-auto mt-5 max-w-lg rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm"><span className="detail-label">Emergency Sent</span><strong className="mt-1 block text-slate-950">{formatEmergencySentTime(emergency.created_at)}</strong></div><label className="form-field mt-7 text-left" htmlFor="other-description">Description <span>(required)</span><textarea id="other-description" className="field-input min-h-32 resize-y" maxLength="240" autoFocus placeholder="Describe what is happening..." value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <p className="mt-4 text-sm font-medium text-red-700" role="alert">{error}</p>}<button className="alert-button mt-6" type="button" disabled={!isMeaningful || submitState === 'loading'} onClick={saveDescription}>{submitState === 'loading' ? 'Saving description...' : 'Continue'}<ArrowRight className="size-5" /></button></div></section>
 }
 
 
