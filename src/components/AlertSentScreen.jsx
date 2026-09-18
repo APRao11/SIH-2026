@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Ambulance, Ban, Check, MapPin, PhoneCall, Radio, Search } from 'lucide-react'
 import EmergencyMap from './EmergencyMap'
 import socket, { joinEmergency, leaveEmergency } from '../lib/socket'
@@ -19,13 +19,20 @@ function formatCoordinate(value) {
   return Number.isFinite(coordinate) ? coordinate.toFixed(6) : 'Unavailable'
 }
 
+async function readApiJson(response, fallbackMessage) {
+  const body = await response.text()
+  try {
+    return JSON.parse(body)
+  } catch {
+    throw new Error(fallbackMessage)
+  }
+}
+
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
   const [secondsRemaining, setSecondsRemaining] = useState(30)
   const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
   const [ambulanceError, setAmbulanceError] = useState('')
-  const [customGuidance, setCustomGuidance] = useState(null)
-  const [guidanceState, setGuidanceState] = useState(emergency.emergency_type === 'Other' ? 'loading' : 'idle')
   const [handledSubmitting, setHandledSubmitting] = useState(false)
   const [handledError, setHandledError] = useState('')
   const [handledNotice, setHandledNotice] = useState('')
@@ -44,12 +51,6 @@ export default function AlertSentScreen({ emergency, onBack }) {
       return null
     }
     refresh()
-    if (emergency.emergency_type === 'Other') {
-      fetch('/api/first-aid/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emergencyType: 'other', description: emergency.description || 'No further details were provided.' }) })
-        .then((response) => response.ok ? response.json() : null)
-        .then((guidance) => { if (active && guidance?.steps?.length) setCustomGuidance(guidance); if (active) setGuidanceState('ready') })
-        .catch(() => { if (active) setGuidanceState('ready') })
-    }
     joinEmergency(emergency.id)
     async function onUpdate(payload) {
       if (payload?.emergencyId !== emergency.id) return
@@ -119,9 +120,49 @@ export default function AlertSentScreen({ emergency, onBack }) {
     return () => window.clearInterval(interval)
   }, [current.created_at, current.search_radius_km, current.assigned_responder_id])
 
+  const [aiGuidance, setAiGuidance] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const guidanceRequests = useRef(new Map())
+
+  useEffect(() => {
+    if (current.emergency_type !== 'Other' || !current.description?.trim()) {
+      setAiGuidance(null)
+      setAiError('')
+      setAiLoading(false)
+      return undefined
+    }
+
+    let active = true
+    const requestKey = `${current.id}:${current.description}`
+    let request = guidanceRequests.current.get(requestKey)
+    if (!request) {
+      request = (async () => {
+        const response = await fetch('/api/ai/emergency-guidance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: current.description }),
+        })
+        const result = await readApiJson(response, 'AI guidance returned an invalid response. Please follow instructions from 108.')
+        if (!response.ok) throw new Error(result.error || 'AI guidance is temporarily unavailable.')
+        if (!result.guidance || !Array.isArray(result.guidance.steps)) throw new Error('AI guidance returned an invalid response. Please follow instructions from 108.')
+        return result.guidance
+      })()
+      guidanceRequests.current.set(requestKey, request)
+    }
+
+    setAiLoading(true)
+    setAiError('')
+    request
+      .then((guidance) => { if (active) setAiGuidance(guidance) })
+      .catch((requestError) => { if (active) setAiError(requestError.message) })
+      .finally(() => { if (active) setAiLoading(false) })
+    return () => { active = false }
+  }, [current.id, current.description, current.emergency_type])
+
   const fixedGuidance = getFirstAidGuidance(current.emergency_type)
   const usesFixedGuidance = hasFixedFirstAidGuidance(current.emergency_type)
-  const steps = usesFixedGuidance ? fixedGuidance.steps : customGuidance?.steps || fixedGuidance.steps
+  const steps = fixedGuidance.steps
   const donts = usesFixedGuidance ? fixedGuidance.donts : []
   const matchedCount = current.matched_responder_count || 0
   const searchRadius = Number(current.search_radius_km || 1.0)
@@ -258,22 +299,43 @@ export default function AlertSentScreen({ emergency, onBack }) {
           </div>
           <div className="surface">
             <p className="eyebrow">First-aid guidance</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">{customGuidance?.title || 'Immediate steps'}</h2>
-            {!usesFixedGuidance && <p className="mt-2 text-xs font-semibold text-violet-700">AI-assisted guidance</p>}
-            {guidanceState === 'loading' && !usesFixedGuidance ? <p className="mt-4 text-sm text-slate-600" role="status">Generating immediate guidance...</p> : <ol className="guidance-list">
-              {steps.map((item) => <li key={item}>{item}</li>)}
-            </ol>}
-            {donts.length > 0 && (
-              <div className="guidance-donts">
-                <h3>Do NOT</h3>
-                <ul>
-                  {donts.map((item) => <li key={item}><Ban className="size-4" />{item}</li>)}
-                </ul>
-              </div>
+            {current.emergency_type === 'Other' ? (
+              <>
+                <h2 className="mt-2 text-2xl font-bold text-slate-950">AI guidance</h2>
+                {aiLoading && <p className="mt-3 text-sm font-semibold text-slate-700">Getting guidance…</p>}
+                {aiError && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">{aiError}</p>}
+                {aiGuidance ? (
+                  <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 text-left">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-purple-700">AI safety guidance</p>
+                    <h3 className="mt-2 text-lg font-bold text-slate-950">{aiGuidance.title}</h3>
+                    <ol className="guidance-list mt-3">
+                      {aiGuidance.steps.map((item) => <li key={item}>{item}</li>)}
+                    </ol>
+                  </div>
+                ) : !aiLoading && !aiError && (
+                  <p className="mt-3 text-sm text-slate-500">Waiting for immediate guidance based on the description you shared.</p>
+                )}
+                {aiGuidance?.disclaimer && <p className="mt-3 text-xs leading-5 text-slate-500">{aiGuidance.disclaimer}</p>}
+              </>
+            ) : (
+              <>
+                <h2 className="mt-2 text-2xl font-bold text-slate-950">Immediate steps</h2>
+                <ol className="guidance-list">
+                  {steps.map((item) => <li key={item}>{item}</li>)}
+                </ol>
+                {donts.length > 0 && (
+                  <div className="guidance-donts">
+                    <h3>Do NOT</h3>
+                    <ul>
+                      {donts.map((item) => <li key={item}><Ban className="size-4" />{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </>
             )}
             <div className="mt-5 border-t border-slate-200 pt-4">
               <a className="call-button" href="tel:108"><PhoneCall className="size-4" />Call 108 ambulance</a>
-              <p className="mt-3 text-xs leading-5 text-slate-500">{usesFixedGuidance ? FIRST_AID_SAFETY_MESSAGE : customGuidance?.disclaimer || 'AI-assisted guidance is for immediate first-aid support only and is not a substitute for professional medical care.'}</p>
+              <p className="mt-3 text-xs leading-5 text-slate-500">{FIRST_AID_SAFETY_MESSAGE}</p>
             </div>
           </div>
         </div>
