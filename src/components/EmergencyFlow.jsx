@@ -94,7 +94,7 @@ export default function EmergencyFlow({ onBack }) {
   if (step === 'confirmation') return <AlertConfirmation emergencyType={selectedType} capturedImage={capturedImage} onBack={() => setStep('photo')} onSent={handleSent} />
   if (step === 'photo') return <CameraVerification capturedImage={capturedImage} onCapture={setCapturedImage} onBack={() => setStep('types')} onContinue={() => setStep('confirmation')} />
   if (step === 'other-guidance') return <OtherEmergencyAssistant capturedImage={capturedImage} onCapture={setCapturedImage} description={otherDescription} onDescription={setOtherDescription} onBack={() => setStep('types')} onContinue={() => setStep('confirmation')} />
-  if (step === 'types') return <TypeSelection selectedType={selectedType} onSelect={setSelectedType} onChooseOther={() => { setSelectedType('Other'); setCapturedImage(null); setOtherDescription(''); setStep('other-guidance') }} onBack={() => setStep('calling')} onContinue={() => setStep('photo')} />
+  if (step === 'types') return <TypeSelection selectedType={selectedType} onSelect={setSelectedType} onChooseOther={() => { setSelectedType('Other'); setCapturedImage(null); setOtherDescription(''); setStep('photo') }} onBack={() => setStep('calling')} onContinue={() => setStep('photo')} />
 
   return <CallingScreen onBack={handleReturnHome} onContinue={() => setStep('types')} />
 }
