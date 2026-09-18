@@ -7,8 +7,14 @@ import { Server as SocketServer } from 'socket.io'
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { randomUUID, scryptSync } from 'node:crypto'
+import { GoogleGenAI } from '@google/genai'
 
 dotenv.config()
+
+// GEMINI_API_KEY is the supported name. API_KEY is accepted temporarily so an
+// existing local setup continues to work while it is renamed in .env.
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY
+const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
 const app = express()
 const server = createServer(app)
@@ -36,6 +42,8 @@ const ETA_METHOD = 'straight_line_distance_estimate'
 const UNRESOLVED_RETENTION_MS = 30 * 60 * 1000
 const RESOLVED_RETENTION_MS = 15 * 60 * 1000
 const HANDLED_VISIBILITY_MS = 2 * 60 * 1000
+
+console.info(`[Gemini] API key configured: ${Boolean(geminiApiKey)}; model: ${geminiModel}`)
 
 function validCoordinate(value, minimum, maximum) {
   return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
@@ -324,6 +332,7 @@ app.post('/api/emergencies', (request, response) => {
   if (!emergencyTypes.has(emergencyType)) return response.status(400).json({ error: 'A valid emergency type is required.' })
   if (!validCoordinate(latitude, -90, 90) || !validCoordinate(longitude, -180, 180)) return response.status(400).json({ error: 'Valid latitude and longitude are required.' })
   if (typeof description !== 'string' || description.length > 240) return response.status(400).json({ error: 'Description must be 240 characters or fewer.' })
+  if (emergencyType === 'Other' && !description.trim()) return response.status(400).json({ error: 'A description is required for an Other emergency.' })
   if (!scenePhoto) return response.status(400).json({ error: 'A scene photo is required before sending an alert.' })
 
   let photo
@@ -423,6 +432,10 @@ function isDescriptionTooVague(description) {
 }
 
 app.post('/api/first-aid/ai', async (request, response) => {
+  // Retired route retained only to give existing clients an explicit migration
+  // error. The supported endpoint is /api/ai/emergency-guidance below.
+  return response.status(410).json({ error: 'This guidance endpoint has been retired. Use /api/ai/emergency-guidance.' })
+
   const { emergencyType, description } = request.body || {}
   if (emergencyType !== 'other') return response.status(400).json({ error: 'AI guidance is available only for Other emergencies.' })
   if (typeof description !== 'string' || !description.trim()) return response.status(400).json({ error: 'Briefly describe what is happening.' })
@@ -450,7 +463,8 @@ app.post('/api/first-aid/ai', async (request, response) => {
     })
     if (!aiResponse.ok) return response.json(fallback)
     const aiResult = await aiResponse.json()
-    const guidance = JSON.parse(aiResult.candidates?.[0]?.content?.parts?.[0]?.text || '')
+    // Kept only for the legacy, unused route below; never parse model text.
+    const guidance = {}
     const steps = Array.isArray(guidance.steps) ? guidance.steps.filter((step) => typeof step === 'string' && step.trim()).slice(0, 4) : []
     if (!steps.length) return response.json(fallback)
     return response.json({
@@ -462,6 +476,103 @@ app.post('/api/first-aid/ai', async (request, response) => {
     })
   } catch {
     return response.json(fallback)
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+app.post('/api/ai/emergency-guidance', async (request, response) => {
+  const { description } = request.body || {}
+  if (typeof description !== 'string' || !description.trim()) return response.status(400).json({ error: 'Briefly describe what is happening.' })
+  if (description.length > 1000) return response.status(400).json({ error: 'Description must be 1,000 characters or fewer.' })
+
+  if (!geminiApiKey) {
+    console.error('[Gemini] request skipped: GEMINI_API_KEY is not configured.')
+    return response.status(503).json({ error: 'Gemini API key is not configured on the server.', code: 'GEMINI_NOT_CONFIGURED' })
+  }
+
+  // This is the only user-provided value included in the Gemini request.
+  // Photos, GPS coordinates, emergency records, and responder data never leave
+  // this server through the AI endpoint.
+  const prompt = `You are an emergency first-aid guidance assistant.
+
+Based ONLY on the emergency description provided by the user, give concise, immediate and practical first-aid guidance.
+
+Do not diagnose the person.
+Do not claim certainty about the medical condition.
+Do not provide unnecessary explanations.
+Prioritize immediate safety and actions the bystander can take while professional emergency help is being contacted.
+Do not prescribe medication or doses.
+
+Emergency description:
+${description.trim()}
+
+Return concise plain-text guidance suitable for displaying on a mobile emergency screen.`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  try {
+    console.info(`[Gemini] request started; description received (${description.trim().length} characters)`)
+    console.info('[Gemini] calling Gemini')
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey })
+    const result = await ai.models.generateContent({
+      model: geminiModel,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { temperature: 0.3, abortSignal: controller.signal },
+    })
+
+    const rawText = result?.text || result?.candidates?.map((candidate) => candidate?.content?.parts?.map((part) => part?.text ?? '').join('') || '').join('\n') || ''
+    const normalizedText = String(rawText).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+    if (!normalizedText) {
+      console.error('[Gemini] response was empty or missing text content.')
+      throw new Error('Gemini returned no usable guidance text.')
+    }
+
+    const title = 'Immediate guidance'
+    let steps = normalizedText
+    if (steps.length) {
+      steps = normalizedText
+        .split(/\n+/)
+        .flatMap((line) => line.split(/(?<=[.!?])\s+/))
+        .map((part) => part.replace(/^[-*•\d.\s]+/, '').trim())
+        .filter((part) => part.length > 8 && part.length < 280)
+        .slice(0, 4)
+    }
+
+    if (!steps.length) {
+      throw new Error('Gemini returned no usable guidance steps.')
+    }
+
+    console.info(`[Gemini] response received: ${normalizedText.length} chars`)
+    return response.json({
+      guidance: {
+        title,
+        steps,
+        urgent: true,
+        disclaimer: AI_FIRST_AID_DISCLAIMER,
+      },
+    })
+  } catch (error) {
+    const status = Number(error?.status || error?.statusCode || error?.response?.status)
+    const rawMessage = String(error?.message || 'Unknown Gemini API error.')
+    const safeMessage = rawMessage.replaceAll(geminiApiKey, '[redacted]').slice(0, 300)
+    const code = status === 401 || status === 403 ? 'GEMINI_AUTH_FAILED'
+      : status === 404 ? 'GEMINI_MODEL_NOT_FOUND'
+        : status === 429 ? 'GEMINI_RATE_LIMITED'
+          : status === 503 ? 'GEMINI_SERVICE_UNAVAILABLE'
+            : error?.name === 'AbortError' ? 'GEMINI_TIMEOUT'
+            : 'GEMINI_REQUEST_FAILED'
+    console.error(`[Gemini] request failed (${code}${Number.isFinite(status) ? `, HTTP ${status}` : ''}): ${safeMessage}`)
+    const detail = process.env.NODE_ENV === 'production' ? undefined : safeMessage
+    const userMessage = code === 'GEMINI_RATE_LIMITED'
+      ? 'AI guidance is temporarily rate limited. Please try again shortly and continue following instructions from 108.'
+      : code === 'GEMINI_SERVICE_UNAVAILABLE'
+        ? 'Gemini is temporarily busy. Please try again shortly and continue following instructions from 108.'
+        : 'AI guidance is currently unavailable. Please follow the instructions provided by 108/emergency professionals.'
+    return response.status(Number.isFinite(status) ? status : 502).json({
+      error: userMessage,
+      code,
+      ...(detail ? { detail } : {}),
+    })
   } finally {
     clearTimeout(timeout)
   }

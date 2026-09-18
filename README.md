@@ -450,6 +450,10 @@ npm run dev
 
 The terminal will display the local development URL.
 
+### Optional Gemini guidance for “Other” emergencies
+
+Copy `.env.example` to `.env` and set `GEMINI_API_KEY` on the server only. Never use a `VITE_` prefix or place this key in frontend code. In the emergency flow, choose **Other**, describe the situation, optionally capture/upload a photo, then select **Get AI Guidance**. The guidance photo is sent to Gemini only for that request and is not stored by the guidance endpoint.
+
 ---
 
 # 🔐 Security & Privacy
