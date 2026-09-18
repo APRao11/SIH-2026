@@ -20,7 +20,7 @@ function formatCoordinate(value) {
 
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
-  const [secondsRemaining, setSecondsRemaining] = useState(20)
+  const [secondsRemaining, setSecondsRemaining] = useState(30)
   const [ambulanceSubmitting, setAmbulanceSubmitting] = useState(false)
   const [ambulanceError, setAmbulanceError] = useState('')
   const [customGuidance, setCustomGuidance] = useState(null)
@@ -109,7 +109,7 @@ export default function AlertSentScreen({ emergency, onBack }) {
       const createdMs = parseTimestampMs(current.created_at)
       if (!Number.isNaN(createdMs)) {
         const elapsedSec = Math.floor((Date.now() - createdMs) / 1000)
-        const rem = Math.max(0, 20 - elapsedSec)
+        const rem = Math.max(0, 30 - elapsedSec)
         setSecondsRemaining(rem)
       }
     }

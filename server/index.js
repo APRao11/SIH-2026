@@ -27,7 +27,7 @@ mkdirSync(scenePhotoDirectory, { recursive: true })
 
 const INITIAL_SEARCH_RADIUS_KM = 1.0
 const EXPANDED_SEARCH_RADIUS_KM = 2.0
-const RADIUS_EXPANSION_TIMEOUT_MS = 20 * 1000
+const RADIUS_EXPANSION_TIMEOUT_MS = 30 * 1000
 const LOCATION_STALE_MINUTES = 15
 // No routing/traffic provider is configured for this MVP. Reassign only when the
 // newly accepted responder is at least one estimated minute faster.
