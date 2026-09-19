@@ -28,6 +28,20 @@ async function readApiJson(response, fallbackMessage) {
   }
 }
 
+const aiFallbackGuidance = {
+  steps: [
+    'Check the scene: Look for immediate danger to ensure it is safe to approach the person.',
+    'Confirm responsiveness: Tap the person firmly on the shoulder to check if they are responsive.',
+    'Note visible signs: Identify key signs of the emergency such as severe bleeding, difficulty breathing, or an allergic reaction to relay to emergency responders.',
+    'Follow instructions: Follow this guidance precisely while waiting for nearby help to arrive.',
+  ],
+  donts: [
+    'Put yourself in danger: Never place yourself at risk to reach the individual.',
+    'Move the person: Do not move the person unless they are in immediate danger from their physical surroundings.',
+    'Administer oral substances: Do not give the person food, drink, or oral medication unless explicitly instructed to do so by a medical professional.',
+  ],
+}
+
 export default function AlertSentScreen({ emergency, onBack }) {
   const [current, setCurrent] = useState(emergency)
   const [secondsRemaining, setSecondsRemaining] = useState(30)
@@ -303,7 +317,24 @@ export default function AlertSentScreen({ emergency, onBack }) {
               <>
                 <h2 className="mt-2 text-2xl font-bold text-slate-950">AI guidance</h2>
                 {aiLoading && <p className="mt-3 text-sm font-semibold text-slate-700">Getting guidance…</p>}
-                {aiError && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">{aiError}</p>}
+                {aiError && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">⚠️ AI Response Failed or API Exhausted for MVP</p>
+                    <h3 className="mt-2 text-lg font-bold text-slate-950">General First-Aid Guidance</h3>
+                    <div className="mt-4">
+                      <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-700">Immediate Steps</p>
+                      <ol className="guidance-list mt-2">
+                        {aiFallbackGuidance.steps.map((item) => <li key={item}>{item}</li>)}
+                      </ol>
+                    </div>
+                    <div className="guidance-donts mt-4">
+                      <h3>Do NOT</h3>
+                      <ul>
+                        {aiFallbackGuidance.donts.map((item) => <li key={item}><Ban className="size-4" />{item}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                )}
                 {aiGuidance ? (
                   <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 text-left">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-purple-700">AI safety guidance</p>
