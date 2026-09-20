@@ -314,6 +314,10 @@ The emergency location helps responders understand where assistance is required.
 
 Responder registration includes identity and credential verification.
 
+<p align="center">
+  <img src="docs/screenshots/admin-dashboard.png" width="800">
+</p>
+Admin can verify the responder.
 ---
 
 # 🎬 Demo
