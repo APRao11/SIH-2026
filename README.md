@@ -99,7 +99,7 @@ The platform can provide emergency-specific first-aid guidance to the bystander,
 | 📋 **Emergency Type**         | Select accident, cardiac emergency, burns, unconsciousness, or other emergency |
 | 📍 **GPS Location**           | Capture the emergency location for responder matching                          |
 | 👨‍⚕️ **Verified Responders** | Only approved responders can receive emergency requests                        |
-| 📸 **Identity Verification**  | Camera-based verification supports responder registration                      |
+| 📸 **Emergency Verification**  | Camera-based emergency alert helps responder to know about the emergency                      |
 | 🔔 **Real-Time Alerts**       | Notify suitable nearby responders about an emergency                           |
 | 🗺️ **Location View**         | Responders can view the emergency location                                     |
 | ⏱️ **Response Matching**      | Consider responder availability, proximity and estimated travel time           |
@@ -274,8 +274,6 @@ This helps create a responder network based on **verified participation rather t
 
 # 📱 Screenshots / Demo
 
-> Replace the placeholders below with screenshots from the running application.
-
 ##  Bystander Emergency Flow
 
 <p align="center">
@@ -343,8 +341,6 @@ Admin can verify the responder.
              ↓
 9. Responder travels to the incident
 ```
-
-> 🎥 A short demonstration video can be added here for the SIH presentation and repository showcase.
 
 ---
 
