@@ -317,7 +317,7 @@ Responder registration includes identity and credential verification.
 </p>
 Admin can verify the responder.
 
----
+
 
 # 🎬 Demo
 
@@ -543,6 +543,19 @@ The goal is to **bridge the critical gap before professional help arrives.**
 
 Built with ❤️ by our team for **Smart India Hackathon 2026**.
 
+    Team Members:
+
+    -Adithi P Rao
+
+    -Thushara B S
+
+    -Spoorthi B S
+
+    -Dhanvitha S
+
+    -Samyak Jain
+
+    -Dhruva S Shetty
 ---
 
 ## 📜 License
