@@ -277,7 +277,7 @@ This helps create a responder network based on **verified participation rather t
 ##  Bystander Emergency Flow
 
 <p align="center">
-  <img src="docs/screenshots/emergency-flow.png" width="800">
+  <img src="docs/screenshots/emergency-flow.png" width="600">
 </p>
 
 **Emergency request → Emergency type → Location → Alert sent**
@@ -287,7 +287,7 @@ This helps create a responder network based on **verified participation rather t
 ## 👨‍⚕️ Responder Dashboard
 
 <p align="center">
-  <img src="docs/screenshots/responder-dashboard.png" width="800">
+  <img src="docs/screenshots/responder-dashboard.png" width="600">
 </p>
 
 Responders can view incoming emergency requests and relevant incident information.
@@ -297,7 +297,7 @@ Responders can view incoming emergency requests and relevant incident informatio
 ## 📍 Emergency Location
 
 <p align="center">
-  <img src="docs/screenshots/emergency-map.png" width="800">
+  <img src="docs/screenshots/emergency-map.png" width="600">
 </p>
 
 The emergency location helps responders understand where assistance is required.
@@ -307,15 +307,16 @@ The emergency location helps responders understand where assistance is required.
 ## 📸 Responder Registration & Verification
 
 <p align="center">
-  <img src="docs/screenshots/responder-registration.png" width="800">
+  <img src="docs/screenshots/responder-registration.png" width="500">
 </p>
 
 Responder registration includes identity and credential verification.
 
 <p align="center">
-  <img src="docs/screenshots/admin-dashboard.png" width="800">
+  <img src="docs/screenshots/admin-dashboard.png" width="600">
 </p>
 Admin can verify the responder.
+
 ---
 
 # 🎬 Demo
