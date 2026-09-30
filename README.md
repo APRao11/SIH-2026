@@ -317,7 +317,7 @@ Responder registration includes identity and credential verification.
 </p>
 Admin can verify the responder.
 
-
+---
 
 # 🎬 Demo
 
@@ -549,7 +549,7 @@ Built with ❤️ by our team for **Smart India Hackathon 2026**.
 
     -Thushara B S
 
-    -Spoorthi B S
+    -Spoorthi P S
 
     -Dhanvitha S
 
