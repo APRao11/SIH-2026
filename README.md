@@ -440,15 +440,6 @@ npm install
 If the frontend and backend have separate package files, install dependencies in their respective directories as configured in the project.
 
 ---
-
-## 3️⃣ Start the Application
-
-```bash
-npm run dev
-```
-
-The terminal will display the local development URL.
-
 ### Optional Gemini guidance for “Other” emergencies
 
 ## 🔐 Gemini API Key Setup
@@ -469,7 +460,7 @@ GEMINI_API_KEY=your_api_key_here
 
 4. Make sure `.env` is included in `.gitignore` so the key is **not pushed to GitHub**.
 
-5. Install dependencies from the main `AVINYA` folder:
+
 
 
 ### Important
@@ -478,6 +469,16 @@ GEMINI_API_KEY=your_api_key_here
 * `.env.example` is provided as a template.
 * Each team member should create their **own `.env`** and add their own Gemini API key.
 * Restart the project after adding or changing the API key.
+
+## 3️⃣ Start the Application
+
+```bash
+npm run dev
+```
+
+The terminal will display the local development URL.
+
+
 
 
 # 🔐 Security & Privacy
