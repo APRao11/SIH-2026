@@ -440,6 +440,35 @@ npm install
 If the frontend and backend have separate package files, install dependencies in their respective directories as configured in the project.
 
 ---
+### Optional Gemini guidance for “Other” emergencies
+
+## 🔐 Gemini API Key Setup
+
+The AI Assistant requires a Gemini API key. Each developer must use their own key.
+
+### Steps
+
+1. **Get a Gemini API key** from Google AI Studio.
+
+2. **Open the main `AVINYA` folder** and create a `.env` file if it does not already exist.
+
+3. Add your key:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+4. Make sure `.env` is included in `.gitignore` so the key is **not pushed to GitHub**.
+
+
+
+
+### Important
+
+* Never commit or share your actual API key.
+* `.env.example` is provided as a template.
+* Each team member should create their **own `.env`** and add their own Gemini API key.
+* Restart the project after adding or changing the API key.
 
 ## 3️⃣ Start the Application
 
@@ -449,11 +478,8 @@ npm run dev
 
 The terminal will display the local development URL.
 
-### Optional Gemini guidance for “Other” emergencies
 
-Copy `.env.example` to `.env` and set `GEMINI_API_KEY` on the server only. Never use a `VITE_` prefix or place this key in frontend code. In the emergency flow, choose **Other**, describe the situation, optionally capture/upload a photo, then select **Get AI Guidance**. The guidance photo is sent to Gemini only for that request and is not stored by the guidance endpoint.
 
----
 
 # 🔐 Security & Privacy
 
