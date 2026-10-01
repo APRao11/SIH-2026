@@ -569,19 +569,15 @@ The goal is to **bridge the critical gap before professional help arrives.**
 
 Built with ❤️ by our team for **Smart India Hackathon 2026**.
 
-    Team Members:
+Team Members:
 
-    -Adithi P Rao
+- [Adithi P Rao](https://github.com/APRao11)
+- [Thushara B S](https://github.com/thushara-bajimar)
+- [Spoorthi P S](https://github.com/Spoorthips18)
+- [Dhanvitha S](https://github.com/Dhanvitha-S)
+- [Samyak Jain](https://github.com/samyakjain8431-cyber)
+- [Dhruva S Shetty](https://github.com/dhruva207-ctrml)
 
-    -Thushara B S
-
-    -Spoorthi P S
-
-    -Dhanvitha S
-
-    -Samyak Jain
-
-    -Dhruva S Shetty
 ---
 
 ## 📜 License
