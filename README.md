@@ -503,6 +503,30 @@ For production deployment, secure cloud storage, encryption, authentication, acc
 
 ---
 
+# 🌍 Sustainable Development Goals (SDGs)
+
+AVINYA supports the following **United Nations Sustainable Development Goals (SDGs)** through its approach to community-based emergency response:
+
+### 🏥 SDG 3 - Good Health and Well-being
+
+Supports timely emergency assistance by connecting people in distress with nearby verified responders and providing context-aware first-aid guidance while professional help is being coordinated.
+
+### 💡 SDG 9 - Industry, Innovation and Infrastructure
+
+Supports innovative emergency-response infrastructure through digital alerts, real-time location tracking, ETA-based responder matching, and dynamic search-radius expansion.
+
+### 🏙️ SDG 11 - Sustainable Cities and Communities
+
+Supports safer and more resilient communities by enabling location-aware coordination between people seeking help and nearby verified responders.
+
+### 🤝 SDG 17 - Partnerships for the Goals
+
+Encourages coordination among responders, volunteers, institutions, and existing emergency services to strengthen community-level emergency response.
+
+> **Through these contributions, AVINYA aims to make emergency assistance more accessible, coordinated, and responsive through technology and community participation.**
+
+---
+
 # 🌱 Future Scope
 
 AVINYA can evolve into a larger emergency-response ecosystem.
@@ -518,6 +542,10 @@ Use actual road networks instead of relying only on straight-line geographical d
 ### 🚦 Traffic-Aware ETA
 
 Consider real-time traffic conditions when estimating responder arrival time.
+
+### 💊 Nearby Medical Stores
+
+Display nearby medical stores and pharmacies to help users quickly locate essential medicines and emergency supplies when required.
 
 ### 📱 Mobile Application
 
